@@ -17,6 +17,12 @@ const API_BASE = getApiBase();
 let currentResumeData = null;
 let isConfigHealthy = false;
 
+// Variants (Phase 1.5 UI)
+let variantsList = ['master'];
+let activeVariantName = 'master';
+let isDirty = false;
+let lastStableVariantName = 'master';
+
 function setNavEnabled(enabled) {
     const ids = ['nav-translate', 'nav-export'];
     ids.forEach((id) => {
@@ -133,6 +139,148 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
+// Variants helpers
+function setDirty(next) {
+    isDirty = !!next;
+    const badge = document.getElementById('variant-dirty');
+    if (badge) badge.style.display = isDirty ? 'inline-flex' : 'none';
+}
+
+function renderVariantSelect() {
+    const sel = document.getElementById('variant-select');
+    if (!sel) return;
+
+    // Keep current selection if possible
+    const prev = sel.value;
+    sel.innerHTML = '';
+    (variantsList || ['master']).forEach((name) => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    });
+
+    // Prefer activeVariantName; fallback to previous value.
+    sel.value = (variantsList.includes(activeVariantName) ? activeVariantName : (variantsList.includes(prev) ? prev : 'master'));
+    lastStableVariantName = sel.value;
+}
+
+async function initVariants({ silent = true } = {}) {
+    try {
+        const res = await apiCall('/api/variants', { timeoutMs: 8000 });
+        if (res && res.success) {
+            variantsList = Array.isArray(res.variants) ? res.variants : ['master'];
+            activeVariantName = res.active || 'master';
+            renderVariantSelect();
+            if (!silent) showNotification(`已加载 variants（active: ${activeVariantName}）`);
+        }
+    } catch (e) {
+        console.warn('[Variants] init failed:', e);
+        // Non-fatal: UI can still work with master.
+    }
+}
+
+async function selectVariant(name) {
+    if (!name) return;
+
+    try {
+        const res = await apiCall('/api/variants/select', {
+            method: 'POST',
+            body: JSON.stringify({ name }),
+            timeoutMs: 15000,
+        });
+
+        if (res && res.success) {
+            activeVariantName = res.name || name;
+            currentResumeData = res.data;
+            setDirty(false);
+            renderVariantSelect();
+
+            // Refresh JSON if edit view is visible
+            const el = document.getElementById('resume-data');
+            if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
+
+            showNotification(`已切换到 variant: ${activeVariantName}`);
+        }
+    } catch (e) {
+        showNotification('切换 variant 失败：' + e.message, 'error');
+        // Revert selection
+        const sel = document.getElementById('variant-select');
+        if (sel) sel.value = lastStableVariantName;
+    }
+}
+
+async function onVariantSelectChange() {
+    const sel = document.getElementById('variant-select');
+    const next = sel ? sel.value : 'master';
+
+    if (next === activeVariantName) return;
+
+    if (isDirty) {
+        const ok = window.confirm('当前有未保存修改（Unsaved）。切换 variant 会丢失这些修改。\n\n点击「确定」丢弃并切换；点击「取消」留在当前 variant。');
+        if (!ok) {
+            if (sel) sel.value = activeVariantName;
+            return;
+        }
+    }
+
+    await selectVariant(next);
+}
+
+async function saveVariant() {
+    if (!currentResumeData) {
+        showNotification('没有可保存的数据', 'error');
+        return;
+    }
+
+    try {
+        await apiCall('/api/variants/save', {
+            method: 'POST',
+            body: JSON.stringify({ name: activeVariantName || 'master', data: currentResumeData }),
+            timeoutMs: 15000,
+        });
+        setDirty(false);
+        showNotification(`已保存（${activeVariantName}）`);
+        await initVariants({ silent: true });
+    } catch (e) {
+        showNotification('保存失败：' + e.message, 'error');
+    }
+}
+
+async function createVariant() {
+    const raw = window.prompt('请输入新 variant 名称（建议：target_google / target_startup 等）');
+    const name = (raw || '').trim();
+    if (!name) return;
+
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+        showNotification('名称只能包含字母数字、点、下划线、横线', 'error');
+        return;
+    }
+
+    try {
+        const res = await apiCall('/api/variants/create', {
+            method: 'POST',
+            body: JSON.stringify({ name, source: 'master' }),
+            timeoutMs: 15000,
+        });
+
+        if (res && res.success) {
+            activeVariantName = res.name || name;
+            currentResumeData = res.data;
+            setDirty(false);
+            await initVariants({ silent: true });
+
+            // Refresh JSON if edit view is visible
+            const el = document.getElementById('resume-data');
+            if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
+
+            showNotification(`已创建并切换到: ${activeVariantName}`);
+        }
+    } catch (e) {
+        showNotification('创建失败：' + e.message, 'error');
+    }
+}
+
 // 切换视图
 function switchView(viewName, evt) {
     // 更新导航激活状态
@@ -216,9 +364,11 @@ async function loadResume() {
         
         if (result.success) {
             currentResumeData = result.data;
+            setDirty(false);
+            await initVariants({ silent: true });
             document.getElementById('resume-data').innerHTML = 
                 `<pre>${JSON.stringify(result.data, null, 2)}</pre>`;
-            showNotification('简历数据已加载');
+            showNotification(`简历数据已加载（${activeVariantName}）`);
         } else {
             document.getElementById('resume-data').innerHTML = 
                 `<p style="color: #ef4444;">加载失败：${result.error}</p>`;
@@ -229,23 +379,26 @@ async function loadResume() {
     }
 }
 
-// 保存简历数据
+// 保存简历数据（会写入当前 active variant）
 async function saveResume() {
     if (!currentResumeData) {
         showNotification('没有可保存的数据', 'error');
         return;
     }
-    
+
     try {
+        // Keep legacy endpoint behavior (also persists to active variant internally)
         const response = await fetch(`${API_BASE}/api/resume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ resume_data: currentResumeData })
         });
-        
+
         const result = await response.json();
         if (result.success) {
-            showNotification('简历已保存！');
+            setDirty(false);
+            await initVariants({ silent: true });
+            showNotification(`简历已保存（${activeVariantName}）`);
         } else {
             showNotification('保存失败：' + result.error, 'error');
         }
@@ -281,10 +434,11 @@ async function updateSection() {
 
         if (result.success) {
             currentResumeData = result.resume_data;
+            setDirty(true);
             document.getElementById('resume-data').innerHTML =
                 `<pre>${JSON.stringify(result.resume_data, null, 2)}</pre>`;
             document.getElementById('update-content').value = '';
-            showNotification('AI优化完成！');
+            showNotification('AI优化完成！（未保存）');
         } else {
             showNotification('更新失败：' + (result.error || '未知错误'), 'error');
         }
@@ -393,9 +547,11 @@ async function translateResume() {
 
         if (result.success) {
             currentResumeData = result.data;
-            showNotification('翻译完成！');
+            setDirty(true);
+            showNotification('翻译完成！（未保存）');
             if (document.getElementById('edit-view').classList.contains('active')) {
-                loadResume();
+                const el = document.getElementById('resume-data');
+                if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
             }
         } else {
             showNotification('翻译失败：' + (result.error || '未知错误'), 'error');
@@ -468,7 +624,8 @@ async function refreshStatus() {
 }
 
 // 页面加载完成后初始化
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     console.log('AI简历更新助手已启动');
     refreshStatus();
+    await initVariants({ silent: true });
 });
