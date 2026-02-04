@@ -32,7 +32,11 @@ async function importPdf() {
     }
 
     currentResumeData = data.data;
-    showNotification('导入成功：已生成结构化 JSON（可在编辑页查看）');
+    // Backend already stored to master.json and set active=master.
+    if (typeof setDirty === 'function') setDirty(false);
+    if (typeof initVariants === 'function') await initVariants({ silent: true });
+
+    showNotification('导入成功：已生成结构化 JSON（已落盘到 master，可在编辑页查看）');
     status.className = 'muted';
     status.textContent = `导入成功：提取字符 ${data.meta && data.meta.chars ? data.meta.chars : '—'}`;
 

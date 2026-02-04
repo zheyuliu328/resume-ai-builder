@@ -51,6 +51,7 @@ function applyChatSuggestion() {
   }
   currentResumeData = pendingResumeData;
   pendingResumeData = null;
+  if (typeof setDirty === 'function') setDirty(true);
 
   // refresh edit view JSON
   const el = document.getElementById('resume-data');
@@ -59,7 +60,7 @@ function applyChatSuggestion() {
   const previewEl = document.getElementById('chat-preview');
   if (previewEl) previewEl.textContent = '';
 
-  showNotification('已应用到当前简历');
+  showNotification(`已应用到当前简历（${typeof activeVariantName === 'string' ? activeVariantName : 'active'}，未保存）`);
 }
 
 async function analyzeJD() {
