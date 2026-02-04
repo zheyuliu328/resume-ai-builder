@@ -18,6 +18,6 @@
 - [x] Task 4: If Task 3 fails, iterate to fix until it passes.
   - VERIFY: rerun `destroy_test.py`.
 
-- [ ] Task 5: Update README.md for Beta 0.9.
+- [x] Task 5: Update README.md for Beta 0.9.
   - Document: setup, limitations (text-based PDF import), JD Killer workflow, Smart PDF (fit engine + TRIMMED), watchdog note.
   - VERIFY: README is consistent with current endpoints and UI.

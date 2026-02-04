@@ -92,6 +92,26 @@ python backend/api_server.py
 open http://localhost:5001
 ```
 
+### ✅ Smoke Test（推荐）
+
+```bash
+python3 destroy_test.py
+```
+
+> 该脚本会启动一个临时后端、跑完整工作流并清理产物；适合用于快速确认环境可用。
+
+## 🧭 Beta 0.9（当前版本）
+
+**新增/关键能力：**
+- **JD Killer 工作流**：粘贴 JD → 解析（/api/jd/parse）→ 匹配分析（/api/jd/analyze）→ 生成/管理 target 变体（/api/variants/*）。
+- **Variants（简历变体）**：master + 多个 target 版本，支持创建/切换/保存。
+- **Smart PDF**：导出 PDF 时内置 *fit engine*（自动调字体/行距/边距），必要时会 **TRIMMED**（裁剪经历/要点）以满足 `target_pages`。
+- **PDF 导入（Beta）**：支持将 **可复制文本** 的 PDF 简历导入为 JSON（/api/import/pdf）。
+
+**限制（Beta）：**
+- PDF 导入仅支持 *text-based* PDF；扫描件需要 OCR（暂不支持）。
+- 后端目前没有独立 watchdog；若进程退出，请重新运行 `./start_server.sh` 或重启 Electron App。
+
 ## 📊 核心功能
 
 ### 1. AI增量更新
@@ -176,10 +196,19 @@ FALLBACK_MODELS = [
 | `/api/config` | POST | 更新配置 |
 | `/api/config/test` | POST | 测试API连接 |
 | `/api/resume` | GET/POST | 获取/保存简历 |
-| `/api/update` | POST | 更新简历章节 |
+| `/api/update` | POST | AI 更新某个简历章节 |
 | `/api/translate` | POST | 翻译简历 |
+| `/api/chat/refine` | POST | Chat 指令式改简历（返回 summary + 更新后的 JSON） |
+| `/api/jd/parse` | POST | JD 解析（company/role/slug/summary） |
+| `/api/jd/analyze` | POST | JD 与简历匹配分析（match_score/gaps/suggestions） |
+| `/api/variants` | GET | 列出变体 + 当前 active |
+| `/api/variants/create` | POST | 从 master 创建变体 |
+| `/api/variants/select` | POST | 切换变体（返回该变体数据） |
+| `/api/variants/save` | POST | 保存变体 |
+| `/api/import/pdf` | POST | 导入 text-based PDF 简历为 JSON |
 | `/api/export/html` | POST | 导出HTML |
-| `/api/export/pdf` | POST | 导出PDF |
+| `/api/export/pdf` | POST | 导出PDF（支持 Smart PDF：fit engine + TRIMMED） |
+| `/api/export/pdf/download` | GET | 下载导出的 PDF |
 
 ## 📚 文档
 
