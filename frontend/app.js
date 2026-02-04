@@ -553,7 +553,8 @@ async function updateSection() {
     try {
         const result = await apiCall('/api/update', {
             method: 'POST',
-            body: JSON.stringify({ section, content }),
+            // Preview-first: ask backend for a suggestion without persisting.
+            body: JSON.stringify({ section, content, resume_data: currentResumeData || {}, apply: false }),
             timeoutMs: 60000,
         });
 
@@ -783,6 +784,14 @@ async function exportPDFSmart() {
 
         const meta = result.meta || {};
         const trimmed = !!meta.trimmed;
+
+        // Surface meta + TRIMMED warning in UI
+        const warnEl = document.getElementById('export-trim-warning');
+        if (warnEl) warnEl.style.display = trimmed ? 'block' : 'none';
+        const metaEl = document.getElementById('export-last-meta');
+        if (metaEl) {
+            metaEl.textContent = `Last export meta:\n${JSON.stringify({ filename: result.filename, ...meta }, null, 2)}`;
+        }
 
         // Filename compliance: add _TRIMMED if content trim happened
         const rawName = (result.filename || 'resume.pdf');

@@ -10,6 +10,19 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
 
 ---
 
+# Logistics Layer (Release Ops)
+
+- [x] Task 0: Setup GitHub Actions for Auto-Release (Logistics Layer).
+  - Add `.github/workflows/release.yml`:
+    - Trigger: merge to `main` with commit message containing `Release v` OR manual `workflow_dispatch`
+    - Steps: extract version; create annotated tag; create GitHub Release with notes from `RELEASE_NOTES_vX.Y.Z.md` (preferred) or fallback to a `ROADMAP.md` section; build + push Docker image to `ghcr.io`
+    - Use least-privilege permissions; no external secrets beyond `GITHUB_TOKEN`.
+    - Risk controls: do NOT auto-merge PRs; release only on explicit `Release vX.Y.Z` merge commit or manual dispatch.
+  - Add `.github/workflows/auto-branch.yml` (optional): trigger after release; create next planning branch `feat/vX.Y-planning` BUT keep it disabled behind `workflow_dispatch` initially.
+  - VERIFY: validate workflow YAML (e.g. `ruby -ryaml -e "YAML.load_file(...)"`) and ensure docs in-workflow are clear.
+
+---
+
 # Operation V1.0 Polish
 
 > Goal: Make V1.0 shippable (stable, clean, documented) without over-design.
@@ -56,14 +69,14 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
 
 > Constraints honored: local-first, minimalism, safety-by-design, and verifiable outcomes.
 
-- [ ] Task 1: Enforce Preview → Apply/Save semantics for mutation paths (start with `/api/update`).
+- [x] Task 1: Enforce Preview → Apply/Save semantics for mutation paths (start with `/api/update`).
   - Add an explicit `apply` flag (default `false`) so the API can return a **suggested** `resume_data` without persisting.
   - Provide an explicit Apply/Save action (endpoint or flag) that is the **only** persistence path.
   - Frontend: align labels with the mental model (“Preview suggestion” vs “Apply/Save”).
   - VERIFY: `python3 -m py_compile backend/api_server.py app.py` and run `python3 destroy_test.py`.
   - Rationale: `VISION.md` §Safety by design (“所有写入都要有显式触发（Apply/Save）”).
 
-- [ ] Task 2: Add per-variant snapshot history + rollback (JSON-on-disk, local-only).
+- [x] Task 2: Add per-variant snapshot history + rollback (JSON-on-disk, local-only).
   - On every variant save, write a timestamped snapshot under `data/history/<variant>/<ts>.json`.
   - Add endpoints:
     - `GET /api/variants/history?name=...&limit=...`
@@ -71,7 +84,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: run `python3 destroy_test.py` plus `python3 tools/verify_history.py` (create/save/list/rollback).
   - Rationale: ADR `docs/adr/0001-local-first-json-variants-store.md` (git-friendly rollback semantics) + `VISION.md` §Local-first/§Safety.
 
-- [ ] Task 3: Persist the “application evidence chain” and export history in `_meta`, and surface it in Export UI.
+- [x] Task 3: Persist the “application evidence chain” and export history in `_meta`, and surface it in Export UI.
   - Standardize `_meta` schema for targets:
     - `_meta.jd_parse`, `_meta.jd_analysis`, `_meta.jd_text`
     - `_meta.exports[]`: append `{ts, target_pages, template, pages, trimmed, trim_summary, filename}` per export
@@ -79,13 +92,13 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: run `python3 destroy_test.py` and confirm target variant JSON contains `_meta.exports[0]`; JS syntax check: `node -c frontend/app.js frontend/chat.js`.
   - Rationale: `VISION.md` Near-term targets (“投递证据链”“Export Cockpit 更完善”) + §Observability.
 
-- [ ] Task 4: Relevance-based Trim v0 (no ML): trim least-relevant bullets first + produce a trim summary.
+- [x] Task 4: Relevance-based Trim v0 (no ML): trim least-relevant bullets first + produce a trim summary.
   - When `_meta.jd_analysis.top_keywords` exists, score bullets by keyword hits; drop lowest-scoring first.
   - Emit `trim_summary` (counts + categories) so the UI can explain what changed.
   - VERIFY: add `python3 tools/verify_trim_relevance.py` (feeds fake JD analysis + resume; asserts kept bullets include top keywords).
   - Rationale: `VISION.md` Near-term targets (“更智能的 Trim（基于 JD relevance）”) + §Safety (“可解释”).
 
-- [ ] Task 5: One-command smoke verification for key paths.
+- [x] Task 5: One-command smoke verification for key paths.
   - Add `tools/smoke_verify.sh` (or `python3 tools/smoke_verify.py`) to run compile/lint/smoke steps consistently.
   - Document it (briefly) so a human can repeatably verify V1.1.
   - VERIFY: `bash tools/smoke_verify.sh` exits 0.

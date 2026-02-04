@@ -345,7 +345,8 @@
                                 <label>新增内容</label>
                                 <textarea id="update-content" placeholder="例如：2024年7月-12月在字节跳动担任数据分析实习生..."></textarea>
                             </div>
-                            <button class="btn btn-primary" onclick="updateSection()">AI优化并更新</button>
+                            <button class="btn btn-primary" onclick="updateSection()">Preview 建议（不保存）</button>
+                            <div class="muted" style="margin-top:10px;line-height:1.5;">提示：点「Save」才会写入当前 Variant（Apply/Save 是唯一持久化路径）。</div>
                         </div>
 
                         <div class="edit-panel card">
@@ -458,7 +459,11 @@
             <div style="font-weight:650;">Export PDF</div>
             <button class="btn btn-secondary" style="padding:6px 10px;" onclick="closeExportPopover()">Close</button>
         </div>
-        <div class="muted" style="font-size:12px;margin-top:6px;">拟合引擎可能需要一些时间（循环压缩/裁剪）。</div>
+        <div class="muted" style="font-size:12px;margin-top:6px;">拟合引擎可能需要一些时间（循环压缩/裁剪）。导出会记录到当前 Variant 的 <code>_meta.exports</code>。</div>
+        <div id="export-trim-warning" style="display:none;margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,204,102,0.35);background:rgba(255,204,102,0.10);color:rgba(255,255,255,0.85);font-size:12px;line-height:1.5;">
+            TRIMMED：为满足页数限制，已自动裁剪内容。请在预览/JSON 中确认删减是否可接受。
+        </div>
+        <div id="export-last-meta" class="muted" style="margin-top:10px;font-size:12px;white-space:pre-wrap;"></div>
 
         <div style="margin-top:12px;display:grid;gap:10px;">
             <div>
