@@ -49,3 +49,10 @@ Failure to do so will result in task rejection.
   - Body: include **Why**, **Risk Audit**, and **Rollback Plan** if high risk.
 
 **Override Condition:** You are only allowed to bypass Gate 2 (Verification) if the environment is strictly broken beyond your control, in which case you must report the specific error log immediately.
+
+---
+
+## PRIVACY: Non-Negotiable (隐私红线)
+- **Do not leak personal data to the public internet.** No posting user resumes/JDs/logs to public URLs, issues, releases, gists, or third-party services.
+- **Local-first by default:** keep data on disk; redact logs; never print full resume/JD blobs unless explicitly requested.
+- **External actions require explicit approval:** anything that sends data outside this machine (public posts, uploading resumes, auto-apply, emailing) must be confirmed by the human.
