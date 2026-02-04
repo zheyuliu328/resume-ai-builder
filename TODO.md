@@ -15,7 +15,7 @@
   - Simulate: create variant -> select -> save -> JD parse -> JD analyze -> export pdf (target_pages=1, template=compact)
   - VERIFY: script exits 0 and logs a minimal success summary.
 
-- [ ] Task 4: If Task 3 fails, iterate to fix until it passes.
+- [x] Task 4: If Task 3 fails, iterate to fix until it passes.
   - VERIFY: rerun `destroy_test.py`.
 
 - [ ] Task 5: Update README.md for Beta 0.9.
