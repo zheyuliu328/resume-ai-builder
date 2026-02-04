@@ -13,6 +13,9 @@ from variants_store import (
     save_json,
     get_master_path,
     get_variant_path,
+    get_history_dir,
+    write_snapshot,
+    list_history,
     read_active_variant,
     write_active_variant,
 )
@@ -26,6 +29,7 @@ from functools import wraps
 from dotenv import load_dotenv
 from pathlib import Path
 from typing import Any, Dict
+from datetime import datetime, timezone
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 load_dotenv(ROOT_DIR / '.env')
@@ -236,7 +240,10 @@ def get_resume():
 @app.route('/api/resume', methods=['POST'])
 @handle_errors
 def save_resume():
-    data = request.json
+    data = request.json or {}
+    if not isinstance(data.get('resume_data'), dict):
+        return jsonify({'success': False, 'error': 'bad_request'}), 400
+
     builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
     builder.resume_data = data['resume_data']
     builder._save_resume()
@@ -248,6 +255,10 @@ def save_resume():
             save_json(MASTER_PATH, builder.resume_data)
         else:
             save_json(get_variant_path(DATA_DIR, active), builder.resume_data)
+
+        # Snapshot history (explicit save)
+        ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        write_snapshot(DATA_DIR, active, builder.resume_data, ts=ts)
     except Exception as e:
         logger.warning(f"variant save skipped: {e}")
 
@@ -290,6 +301,9 @@ def update_section():
                 save_json(MASTER_PATH, builder.resume_data)
             else:
                 save_json(get_variant_path(DATA_DIR, active), builder.resume_data)
+
+            ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+            write_snapshot(DATA_DIR, active, builder.resume_data, ts=ts)
         except Exception as e:
             logger.warning(f"variant save skipped: {e}")
 
@@ -594,6 +608,13 @@ def variants_save():
     if not name or not isinstance(data, dict):
         return jsonify({'success': False, 'error': 'bad_request'}), 400
 
+    # Snapshot on every explicit save.
+    ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    try:
+        write_snapshot(DATA_DIR, name, data, ts=ts)
+    except Exception as e:
+        logger.warning(f"snapshot write skipped: {e}")
+
     if name == 'master':
         save_json(MASTER_PATH, data)
         write_active_variant(DATA_DIR, 'master')
@@ -603,6 +624,50 @@ def variants_save():
     save_json(path, data)
     write_active_variant(DATA_DIR, name)
     return jsonify({'success': True, 'name': name})
+
+
+@app.route('/api/variants/history', methods=['GET'])
+@handle_errors
+def variants_history():
+    name = (request.args.get('name') or '').strip()
+    limit_raw = (request.args.get('limit') or '').strip()
+
+    if not name:
+        return jsonify({'success': False, 'error': 'missing_name'}), 400
+
+    try:
+        limit = int(limit_raw) if limit_raw else 20
+    except Exception:
+        limit = 20
+
+    items = list_history(DATA_DIR, name, limit=limit)
+    return jsonify({'success': True, 'name': name, 'history': [{'ts': ts} for ts in items]})
+
+
+@app.route('/api/variants/rollback', methods=['POST'])
+@handle_errors
+def variants_rollback():
+    payload = request.json or {}
+    name = (payload.get('name') or '').strip()
+    ts = (payload.get('ts') or '').strip()
+
+    if not name or not ts:
+        return jsonify({'success': False, 'error': 'bad_request'}), 400
+
+    snap_path = get_history_dir(DATA_DIR, name) / f'{ts}.json'
+    if not snap_path.exists():
+        return jsonify({'success': False, 'error': 'snapshot_not_found'}), 404
+
+    data = load_json(snap_path)
+
+    if name == 'master':
+        save_json(MASTER_PATH, data)
+        write_active_variant(DATA_DIR, 'master')
+    else:
+        save_json(get_variant_path(DATA_DIR, name), data)
+        write_active_variant(DATA_DIR, name)
+
+    return jsonify({'success': True, 'name': name, 'data': data, 'rolled_back_to': ts})
 
 
 @app.route('/api/variants/create', methods=['POST'])

@@ -63,7 +63,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: `python3 -m py_compile backend/api_server.py app.py` and run `python3 destroy_test.py`.
   - Rationale: `VISION.md` §Safety by design (“所有写入都要有显式触发（Apply/Save）”).
 
-- [ ] Task 2: Add per-variant snapshot history + rollback (JSON-on-disk, local-only).
+- [x] Task 2: Add per-variant snapshot history + rollback (JSON-on-disk, local-only).
   - On every variant save, write a timestamped snapshot under `data/history/<variant>/<ts>.json`.
   - Add endpoints:
     - `GET /api/variants/history?name=...&limit=...`

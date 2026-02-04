@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 
 def ensure_dirs(data_dir: Path) -> None:
     (data_dir / 'variants').mkdir(parents=True, exist_ok=True)
+    (data_dir / 'history').mkdir(parents=True, exist_ok=True)
 
 
 def list_variants(data_dir: Path) -> List[str]:
@@ -40,6 +41,37 @@ def get_active_variant_path(data_dir: Path) -> Path:
 
 def get_variant_path(data_dir: Path, name: str) -> Path:
     return data_dir / 'variants' / f'{name}.json'
+
+
+def get_history_dir(data_dir: Path, name: str) -> Path:
+    """History directory for a variant (or 'master')."""
+    return data_dir / 'history' / name
+
+
+def write_snapshot(data_dir: Path, name: str, data: Dict, *, ts: str) -> Path:
+    """Write a timestamped snapshot for a variant.
+
+    Snapshots are JSON-on-disk for git/diff-friendly rollback.
+    Caller provides ts to make tests deterministic.
+    """
+    ensure_dirs(data_dir)
+    d = get_history_dir(data_dir, name)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f'{ts}.json'
+    save_json(path, data)
+    return path
+
+
+def list_history(data_dir: Path, name: str, *, limit: int = 20) -> List[str]:
+    """Return snapshot timestamps (newest first)."""
+    ensure_dirs(data_dir)
+    d = get_history_dir(data_dir, name)
+    if not d.exists():
+        return []
+    items = sorted([p.stem for p in d.glob('*.json')], reverse=True)
+    if limit and limit > 0:
+        return items[: int(limit)]
+    return items
 
 
 def read_active_variant(data_dir: Path) -> Optional[str]:
