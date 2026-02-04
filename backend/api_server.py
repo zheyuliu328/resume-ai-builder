@@ -329,6 +329,7 @@ def chat_refine():
 @handle_errors
 def jd_analyze():
     """Analyze a JD against current resume and return gaps + suggestions."""
+
     payload: Dict[str, Any] = request.json or {}
     jd = (payload.get('jd') or '').strip()
     resume_data = payload.get('resume_data')
@@ -356,6 +357,67 @@ def jd_analyze():
     if not isinstance(parsed, dict):
         return jsonify({'success': False, 'error': 'ai_return_invalid'}), 500
     return jsonify({'success': True, 'data': parsed})
+
+
+@app.route('/api/jd/parse', methods=['POST'])
+@handle_errors
+def jd_parse():
+    """Parse a JD into structured metadata for creating a target variant.
+
+    Request JSON:
+      { jd: string }
+
+    Response:
+      { success: true, data: { company_name, role_name, slug, summary } }
+    """
+    payload: Dict[str, Any] = request.json or {}
+    jd = (payload.get('jd') or '').strip()
+
+    if not jd:
+        return jsonify({'success': False, 'error': 'missing_jd'}), 400
+
+    builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
+
+    prompt = (
+        "You are an assistant helping create a resume variant from a Job Description.\n"
+        "Extract: company_name, role_name, and create a filesystem-safe slug for the resume variant.\n"
+        "Rules:\n"
+        "- slug must be lowercase and match /^[a-z0-9._-]+$/\n"
+        "- slug should start with 'target_'\n"
+        "- be concise; if company/role unknown, use 'unknown'\n"
+        "Return ONLY JSON with keys: company_name, role_name, slug, summary.\n\n"
+        f"Job Description:\n{jd}\n"
+    )
+
+    message = call_ai_with_fallback(builder, prompt, max_tokens=250)
+    parsed = extract_json_from_text(message.content[0].text)
+    if not isinstance(parsed, dict):
+        return jsonify({'success': False, 'error': 'ai_return_invalid'}), 500
+
+    company = str(parsed.get('company_name') or 'unknown').strip() or 'unknown'
+    role = str(parsed.get('role_name') or 'unknown').strip() or 'unknown'
+    slug = str(parsed.get('slug') or '').strip().lower()
+    summary = str(parsed.get('summary') or '').strip()
+
+    import re
+    def _slugify(s: str) -> str:
+        s = (s or '').strip().lower()
+        s = re.sub(r"[^a-z0-9._-]+", "_", s)
+        s = re.sub(r"_+", "_", s).strip('_')
+        return s
+
+    if not slug or not re.match(r"^[a-z0-9._-]+$", slug) or not slug.startswith('target_'):
+        slug = f"target_{_slugify(company)}_{_slugify(role)}"
+        slug = re.sub(r"_+", "_", slug).strip('_')
+        if not slug.startswith('target_'):
+            slug = 'target_' + slug
+
+    return jsonify({'success': True, 'data': {
+        'company_name': company,
+        'role_name': role,
+        'slug': slug,
+        'summary': summary,
+    }})
 
 
 @app.route('/api/export/html', methods=['POST'])
