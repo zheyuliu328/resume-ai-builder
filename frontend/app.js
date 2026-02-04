@@ -200,6 +200,11 @@ async function selectVariant(name) {
             const el = document.getElementById('resume-data');
             if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
 
+            // Notify chat view to render onboarding message if any
+            if (typeof onVariantChangedForChat === 'function') {
+                onVariantChangedForChat(currentResumeData);
+            }
+
             showNotification(`已切换到 variant: ${activeVariantName}`);
         }
     } catch (e) {
@@ -340,18 +345,49 @@ async function analyzeJDAndCreateVariant() {
         if (created && created.success) {
             activeVariantName = created.name || slug;
             currentResumeData = created.data;
+
+            // Step 3 prep: attach meta + run JD analysis to generate a "first strike" plan.
+            const jdAnalysis = await apiCall('/api/jd/analyze', {
+                method: 'POST',
+                body: JSON.stringify({ jd, resume_data: currentResumeData || {} }),
+                timeoutMs: 90000,
+            });
+
+            const metaPack = {
+                is_new: true,
+                created_at: new Date().toISOString(),
+                jd_parse: meta,
+                jd_analysis: (jdAnalysis && jdAnalysis.data) ? jdAnalysis.data : null,
+                jd_text: jd.slice(0, 8000),
+            };
+
+            if (!currentResumeData || typeof currentResumeData !== 'object') currentResumeData = {};
+            currentResumeData._meta = metaPack;
+
+            // Persist meta immediately (system-generated) so future loads still show onboarding.
+            await apiCall('/api/variants/save', {
+                method: 'POST',
+                body: JSON.stringify({ name: activeVariantName, data: currentResumeData }),
+                timeoutMs: 15000,
+            });
+
             setDirty(false);
             await initVariants({ silent: true });
 
             const el = document.getElementById('resume-data');
             if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
 
+            // Notify chat to render onboarding system message
+            if (typeof onVariantChangedForChat === 'function') {
+                onVariantChangedForChat(currentResumeData);
+            }
+
             closeJDVariantModal();
             showNotification(`已创建并切换到: ${activeVariantName}`);
 
             // Optional: dump meta into JD result panel if present
             const out = document.getElementById('jd-result');
-            if (out) out.textContent = JSON.stringify(meta, null, 2);
+            if (out) out.textContent = JSON.stringify(metaPack, null, 2);
         }
     } catch (e) {
         showNotification('JD 创建 variant 失败：' + e.message, 'error');
