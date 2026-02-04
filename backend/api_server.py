@@ -39,21 +39,25 @@ def handle_errors(f):
 
 
 def validate_startup():
+    """Run lightweight startup checks and return a list of human-friendly issues."""
     issues = []
     try:
-        import anthropic
+        import anthropic  # noqa: F401
     except ImportError:
-        issues.append("❌ 缺少 anthropic: pip install anthropic")
+        issues.append("missing_dependency:anthropic")
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # noqa: F401
     except ImportError:
-        issues.append("⚠️ 缺少 playwright: pip install playwright && playwright install chromium")
+        issues.append("missing_dependency:playwright")
     if not os.getenv('CLAUDE_API_KEY'):
-        issues.append("⚠️ 未设置 CLAUDE_API_KEY")
+        issues.append("missing_env:CLAUDE_API_KEY")
+
     if issues:
-        logger.warning("启动检查:\n" + "\n".join(issues))
+        logger.warning("Startup checks failed: %s", ", ".join(issues))
     else:
-        logger.info("✅ 启动检查通过")
+        logger.info("✅ Startup checks passed")
+
+    return issues
 
 
 # 获取前端目录路径
@@ -67,6 +71,9 @@ config = {
     'base_url': os.getenv('CLAUDE_BASE_URL', 'https://api.anthropic.com'),
     'model': os.getenv('CLAUDE_MODEL', 'claude-sonnet-4-5-20250929')
 }
+
+# Startup diagnostic snapshot (kept in-memory)
+STARTUP_ISSUES = []
 
 # 备用模型列表（按优先级排序）
 FALLBACK_MODELS = [
@@ -104,10 +111,27 @@ def call_ai_with_fallback(builder, prompt, max_tokens=4096):
 @app.route('/api/config', methods=['POST'])
 @handle_errors
 def set_config():
+    """Update runtime API config (in-memory)."""
     global config
-    config.update(request.json)
-    logger.info("配置已更新")
-    return jsonify({'success': True, 'message': '配置已更新'})
+    payload = request.json or {}
+    # Only allow known keys
+    for k in ['api_key', 'base_url', 'model']:
+        if k in payload:
+            config[k] = payload[k]
+    logger.info("Config updated")
+    return jsonify({'success': True, 'message': 'Config updated'})
+
+
+@app.route('/api/config/status', methods=['GET'])
+@handle_errors
+def config_status():
+    """Return a safe, read-only config snapshot (no secrets)."""
+    return jsonify({
+        'success': True,
+        'configured': bool(config.get('api_key')),
+        'base_url': config.get('base_url', ''),
+        'model': config.get('model', ''),
+    })
 
 
 @app.route('/api/config/test', methods=['POST'])
@@ -246,7 +270,12 @@ def export_pdf():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'ok', 'message': 'API服务运行正常'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'API服务运行正常',
+        'startup_issues': STARTUP_ISSUES,
+        'configured': bool(config.get('api_key')),
+    })
 
 
 # 静态文件服务
@@ -263,7 +292,9 @@ def serve_static(filename):
 
 
 if __name__ == '__main__':
-    validate_startup()
+    STARTUP_ISSUES[:] = validate_startup()
     port = int(os.getenv('FLASK_PORT', 5001))
     logger.info(f"🚀 Flask API启动: http://localhost:{port}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # debug defaults to off for stability; enable via FLASK_DEBUG=1
+    debug = os.getenv('FLASK_DEBUG', '0') == '1'
+    app.run(host='0.0.0.0', port=port, debug=debug)

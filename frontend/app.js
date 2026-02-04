@@ -15,21 +15,79 @@ const API_BASE = getApiBase();
 
 // 全局状态
 let currentResumeData = null;
+let isConfigHealthy = false;
 
-// 统一API调用（带日志和错误处理）
+function setNavEnabled(enabled) {
+    const ids = ['nav-translate', 'nav-export'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.opacity = enabled ? '1' : '0.5';
+        el.style.pointerEvents = enabled ? 'auto' : 'none';
+        el.title = enabled ? '' : '请先完成 API 配置并测试连接';
+    });
+}
+
+function setStatusPill(id, text, kind = 'neutral') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    const styles = {
+        ok: { bg: '#ecfdf5', fg: '#065f46' },
+        warn: { bg: '#fffbeb', fg: '#92400e' },
+        err: { bg: '#fef2f2', fg: '#991b1b' },
+        neutral: { bg: '#f3f4f6', fg: '#374151' },
+        info: { bg: '#eef2ff', fg: '#3730a3' },
+    };
+    const s = styles[kind] || styles.neutral;
+    el.style.background = s.bg;
+    el.style.color = s.fg;
+}
+
+// 统一API调用（带日志、错误处理、超时）
 async function apiCall(url, options = {}) {
-    console.log(`[API] ${options.method || 'GET'} ${url}`);
+    // Use API_BASE by default if caller passes relative path
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+    const method = options.method || 'GET';
+    const timeoutMs = options.timeoutMs || 15000;
+
+    console.log(`[API] ${method} ${fullUrl}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-        const response = await fetch(url, options);
-        const result = await response.json();
-        if (!result.success && result.error) {
+        const response = await fetch(fullUrl, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
+            },
+            signal: controller.signal,
+            ...options,
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const result = contentType.includes('application/json') ? await response.json() : { success: response.ok, data: await response.text() };
+
+        if (!response.ok) {
+            const msg = (result && result.error) ? result.error : `HTTP ${response.status}`;
+            throw new Error(msg);
+        }
+
+        if (result && result.success === false && result.error) {
             throw new Error(result.error);
         }
+
         console.log('[API Success]', result);
         return result;
     } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(`请求超时（${timeoutMs}ms）：${url}`);
+        }
         console.error('[API Error]', error);
         throw error;
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -196,35 +254,40 @@ async function saveResume() {
 
 // AI更新简历部分
 async function updateSection() {
+    if (!isConfigHealthy) {
+        showNotification('请先在「API配置」中保存并测试连接', 'error');
+        switchView('config');
+        return;
+    }
+
     const section = document.getElementById('update-section').value;
     const content = document.getElementById('update-content').value;
-    
+
     if (!content.trim()) {
         showNotification('请输入更新内容', 'error');
         return;
     }
-    
+
     showNotification('AI正在优化中...', 'success');
-    
+
     try {
-        const response = await fetch(`${API_BASE}/api/update`, {
+        const result = await apiCall('/api/update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ section, content })
+            body: JSON.stringify({ section, content }),
+            timeoutMs: 60000,
         });
-        
-        const result = await response.json();
+
         if (result.success) {
             currentResumeData = result.resume_data;
-            document.getElementById('resume-data').innerHTML = 
+            document.getElementById('resume-data').innerHTML =
                 `<pre>${JSON.stringify(result.resume_data, null, 2)}</pre>`;
             document.getElementById('update-content').value = '';
             showNotification('AI优化完成！');
         } else {
-            showNotification('更新失败：' + result.error, 'error');
+            showNotification('更新失败：' + (result.error || '未知错误'), 'error');
         }
     } catch (error) {
-        showNotification('网络错误：' + error.message, 'error');
+        showNotification('请求失败：' + error.message, 'error');
     }
 }
 
@@ -308,20 +371,24 @@ async function loadResumeData() {
 
 // 翻译简历
 async function translateResume() {
+    if (!isConfigHealthy) {
+        showNotification('请先在「API配置」中保存并测试连接', 'error');
+        switchView('config');
+        return;
+    }
+
     const targetLang = prompt('请选择目标语言：\n1. zh-CN (简体中文)\n2. zh-TW (繁体中文)\n3. en-US (英语)', 'en-US');
-    
     if (!targetLang) return;
-    
+
     showNotification('AI正在翻译中...', 'success');
-    
+
     try {
-        const response = await fetch(`${API_BASE}/api/translate`, {
+        const result = await apiCall('/api/translate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target_lang: targetLang })
+            body: JSON.stringify({ target_lang: targetLang }),
+            timeoutMs: 60000,
         });
-        
-        const result = await response.json();
+
         if (result.success) {
             currentResumeData = result.data;
             showNotification('翻译完成！');
@@ -329,47 +396,77 @@ async function translateResume() {
                 loadResume();
             }
         } else {
-            showNotification('翻译失败：' + result.error, 'error');
+            showNotification('翻译失败：' + (result.error || '未知错误'), 'error');
         }
     } catch (error) {
-        showNotification('网络错误：' + error.message, 'error');
+        showNotification('请求失败：' + error.message, 'error');
     }
 }
 
 // 导出PDF
 async function exportPDF() {
+    if (!isConfigHealthy) {
+        showNotification('请先在「API配置」中保存并测试连接', 'error');
+        switchView('config');
+        return;
+    }
+
     showNotification('正在生成PDF...', 'success');
-    
+
     try {
-        const response = await fetch(`${API_BASE}/api/export/pdf`, {
+        const result = await apiCall('/api/export/pdf', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ resume_data: currentResumeData })
+            body: JSON.stringify({ resume_data: currentResumeData }),
+            timeoutMs: 90000,
         });
-        
-        const result = await response.json();
+
         if (result.success) {
             showNotification(`PDF已导出：${result.filename}`);
         } else {
-            showNotification('导出失败：' + result.error, 'error');
+            showNotification('导出失败：' + (result.error || '未知错误'), 'error');
         }
     } catch (error) {
-        showNotification('网络错误：' + error.message, 'error');
+        showNotification('请求失败：' + error.message, 'error');
+    }
+}
+
+async function refreshStatus() {
+    // Backend health
+    try {
+        const health = await apiCall('/health', { timeoutMs: 4000 });
+        setStatusPill('status-backend', 'Backend: OK', 'ok');
+
+        const issues = (health && health.startup_issues) ? health.startup_issues : [];
+        if (issues.length) {
+            setStatusPill('status-backend', `Backend: WARN (${issues.length})`, 'warn');
+        }
+    } catch (e) {
+        setStatusPill('status-backend', 'Backend: DOWN', 'err');
+        setStatusPill('status-config', 'Config: unknown', 'neutral');
+        setStatusPill('status-model', 'Model: —', 'neutral');
+        setNavEnabled(false);
+        isConfigHealthy = false;
+        return;
+    }
+
+    // Safe config status
+    try {
+        const cfg = await apiCall('/api/config/status', { timeoutMs: 4000 });
+        const configured = !!(cfg && cfg.configured);
+        isConfigHealthy = configured;
+        setStatusPill('status-config', configured ? 'Config: OK' : 'Config: missing', configured ? 'ok' : 'warn');
+        setStatusPill('status-model', `Model: ${cfg.model || '—'}`, 'neutral');
+        setNavEnabled(configured);
+    } catch (e) {
+        setStatusPill('status-config', 'Config: unknown', 'neutral');
+        setStatusPill('status-model', 'Model: —', 'neutral');
+        setNavEnabled(false);
+        isConfigHealthy = false;
     }
 }
 
 // 页面加载完成后初始化
 window.addEventListener('DOMContentLoaded', () => {
     console.log('AI简历更新助手已启动');
-    // 检查后端连接
-    fetch(`${API_BASE}/health`)
-        .then(res => res.json())
-        .then(data => {
-            console.log('后端连接成功:', data);
-            showNotification('应用已就绪');
-        })
-        .catch(err => {
-            console.error('后端连接失败:', err);
-            showNotification('后端服务未启动，请检查', 'error');
-        });
+    refreshStatus();
 });
