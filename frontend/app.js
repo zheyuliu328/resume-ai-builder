@@ -688,10 +688,15 @@ async function exportPDF() {
     showNotification('正在生成PDF...', 'success');
 
     try {
+        const targetPages = prompt('PDF 目标页数：1 或 2', '1');
+        if (!targetPages) return;
+        const template = prompt('模板：modern 或 compact', 'modern');
+        if (!template) return;
+
         const result = await apiCall('/api/export/pdf', {
             method: 'POST',
-            body: JSON.stringify({ resume_data: currentResumeData }),
-            timeoutMs: 90000,
+            body: JSON.stringify({ resume_data: currentResumeData, target_pages: Number(targetPages), template: String(template).trim() }),
+            timeoutMs: 180000,
         });
 
         if (result.success) {
