@@ -243,7 +243,7 @@
                     <span class="nav-icon">💬</span>
                     <span>Chat / JD</span>
                 </div>
-                <div class="nav-item" id="nav-export" onclick="exportPDF()">
+                <div class="nav-item" id="nav-export" onclick="toggleExportPopover(event)">
                     <span class="nav-icon">📄</span>
                     <span>导出PDF</span>
                 </div>
@@ -448,6 +448,36 @@
             <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap;">
                 <span id="jd-variant-hint" class="muted" style="font-size:12px;display:none;"></span>
                 <button class="btn btn-primary" onclick="analyzeJDAndCreateVariant()">Go</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export PDF Popover (Phase 2 cockpit) -->
+    <div id="export-popover" style="display:none;position:fixed;z-index:60;min-width:320px;max-width:min(420px, 92vw);background:var(--panel-solid);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <div style="font-weight:650;">Export PDF</div>
+            <button class="btn btn-secondary" style="padding:6px 10px;" onclick="closeExportPopover()">Close</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px;">拟合引擎可能需要一些时间（循环压缩/裁剪）。</div>
+
+        <div style="margin-top:12px;display:grid;gap:10px;">
+            <div>
+                <div class="muted" style="font-size:12px;margin-bottom:6px;">Pages</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="setExportPages(1)" id="btn-pages-1">1 Page</button>
+                    <button class="btn btn-secondary" onclick="setExportPages(2)" id="btn-pages-2">2 Pages</button>
+                </div>
+            </div>
+            <div>
+                <div class="muted" style="font-size:12px;margin-bottom:6px;">Style</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="setExportTemplate('modern')" id="btn-tpl-modern">Modern</button>
+                    <button class="btn btn-secondary" onclick="setExportTemplate('compact')" id="btn-tpl-compact">Compact</button>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;">
+                <span id="export-hint" class="muted" style="font-size:12px;display:none;"></span>
+                <button class="btn btn-primary" id="export-download" onclick="exportPDFSmart()">Download</button>
             </div>
         </div>
     </div>

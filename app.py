@@ -374,6 +374,9 @@ class ResumeBuilder:
         - target_pages: 1 or 2
         - template: 'modern' | 'compact'
 
+        Returns:
+          { "filename": str, "meta": { target_pages, template, pages, trimmed, style, trim } }
+
         Strategy:
         1) Try CSS shrink (font-size/line-height/padding/spacing)
         2) If still too long, trim content (reduce experiences + bullets)
@@ -451,6 +454,7 @@ class ResumeBuilder:
 
                 best_pdf = None
                 best_pages = 999
+                best_meta = {"pages": 999, "trimmed": False, "style": {}, "trim": None}
 
                 for trim in trim_steps:
                     for style in style_steps:
@@ -467,28 +471,31 @@ class ResumeBuilder:
                             page.pdf(path=pdf_path, format='A4', print_background=True)
 
                             pages = count_pages(pdf_path)
+                            trimmed = bool(trim)
+
                             if pages < best_pages:
                                 best_pages = pages
                                 with open(pdf_path, 'rb') as rf:
                                     best_pdf = rf.read()
+                                best_meta = {"pages": pages, "trimmed": trimmed, "style": style, "trim": trim}
 
                             if pages <= target_pages:
                                 with open(filename, 'wb') as out:
                                     out.write(best_pdf)
-                                return filename
+                                return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, **best_meta}}
 
                 # If we never reached target, still output best attempt.
                 if best_pdf is not None:
                     with open(filename, 'wb') as out:
                         out.write(best_pdf)
-                    return filename
+                    return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, **best_meta}}
 
                 # Fallback (shouldn't happen)
                 html_file = self.export_html("temp_resume.html")
                 page.goto(f"file://{os.path.abspath(html_file)}")
                 page.pdf(path=filename, format="A4", print_background=True)
                 os.remove(html_file)
-                return filename
+                return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, "pages": 999, "trimmed": False, "style": {}, "trim": None}}
             finally:
                 browser.close()
 
