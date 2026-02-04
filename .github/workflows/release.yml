@@ -20,12 +20,14 @@ on:
           - roadmap
 
 permissions:
-  contents: write   # create tag + release
-  packages: write   # push ghcr image
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create tag + release
+      packages: write   # push ghcr image
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, 'Release v'))

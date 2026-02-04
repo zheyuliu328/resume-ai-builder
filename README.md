@@ -228,6 +228,27 @@ FALLBACK_MODELS = [
 - 创建 GitHub Release（release notes 优先来自 `RELEASE_NOTES_vX.Y.Z.md`；否则尝试从 `ROADMAP.md` 中提取 `## vX.Y.Z` 小节）
 - 构建并推送 Docker 镜像到 `ghcr.io/<owner>/<repo>`（使用 `GITHUB_TOKEN`；需要 `packages: write` 权限）
 
+### Docker 使用说明（GHCR）
+
+拉取并运行（示例）：
+
+```bash
+# 需要先在 GitHub Packages 页面确认镜像可见性（public/private）
+docker pull ghcr.io/<owner>/<repo>:vX.Y.Z
+
+docker run --rm -p 5001:5001 \
+  -e FLASK_PORT=5001 \
+  ghcr.io/<owner>/<repo>:vX.Y.Z
+```
+
+本地构建（不推送）：
+
+```bash
+docker build -t resume-ai-builder:local .
+
+docker run --rm -p 5001:5001 resume-ai-builder:local
+```
+
 > 人工门控：只有显式包含 `Release v...` 的 commit 或手动触发才会发布。
 
 ### 2) 手动 workflow_dispatch 发布
