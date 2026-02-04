@@ -227,6 +227,10 @@
                     <span class="nav-icon">📊</span>
                     <span>Dashboard</span>
                 </div>
+                <div class="nav-item" data-view="refinery" onclick="switchView('refinery')">
+                    <span class="nav-icon">🧪</span>
+                    <span>Refinery</span>
+                </div>
                 <div class="nav-item" data-view="edit" onclick="switchView('edit')">
                     <span class="nav-icon">✏️</span>
                     <span>编辑简历</span>
@@ -381,6 +385,39 @@
                                 <pre id="dashboard-exports" class="muted" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height: 260px;overflow:auto;"></pre>
                             </details>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Data Refinery (V2.0 v0) -->
+                <div id="refinery-view" class="view">
+                    <div class="card" style="max-width: 980px; margin: 0 auto; padding: 18px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <div>
+                                <h3 style="margin-bottom: 6px;">🧪 Data Refinery</h3>
+                                <div class="muted">跨 variants 汇总 match_score / gaps / keywords（本地数据；不触发任何外部 API）。</div>
+                            </div>
+                            <div style="display:flex;gap:10px;align-items:center;">
+                                <button class="btn btn-secondary" onclick="loadRefineryAnalytics()">Refresh</button>
+                            </div>
+                        </div>
+
+                        <div id="refinery-status" class="muted" style="margin-top:12px;"></div>
+
+                        <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 14px; margin-top:14px;">
+                            <div class="card" style="padding: 14px; background: rgba(255,255,255,0.04); box-shadow: none;">
+                                <div style="font-weight:650;">Summary</div>
+                                <pre id="refinery-summary" class="muted" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height: 280px;overflow:auto;"></pre>
+                            </div>
+                            <div class="card" style="padding: 14px; background: rgba(255,255,255,0.04); box-shadow: none;">
+                                <div style="font-weight:650;">Top Signals</div>
+                                <pre id="refinery-top" class="muted" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height: 280px;overflow:auto;"></pre>
+                            </div>
+                        </div>
+
+                        <details style="margin-top:14px;" open>
+                            <summary class="muted">Per-variant</summary>
+                            <pre id="refinery-per-variant" class="muted" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height: 320px;overflow:auto;"></pre>
+                        </details>
                     </div>
                 </div>
 

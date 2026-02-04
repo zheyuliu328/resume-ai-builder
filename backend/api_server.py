@@ -30,6 +30,8 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime, timezone
+from collections import Counter
+from statistics import mean
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 load_dotenv(ROOT_DIR / '.env')
@@ -781,6 +783,81 @@ def import_pdf():
     write_active_variant(DATA_DIR, 'master')
 
     return jsonify({'success': True, 'data': data, 'meta': {'chars': len(text)}, 'stored': {'master': True}})
+
+
+@app.route('/api/refinery/analytics', methods=['GET'])
+@handle_errors
+def refinery_analytics():
+    """Aggregate simple analytics across variants (local-first).
+
+    Reads from ./data (master + variants). No external calls.
+    Writes a cached copy to data/analytics.json (best-effort).
+    """
+
+    variants = list_variants(DATA_DIR)
+    names = ['master'] + variants
+
+    per_variant = []
+    match_scores = []
+    gaps_counter: Counter = Counter()
+    kw_counter: Counter = Counter()
+
+    def _load_variant(name: str) -> Dict[str, Any]:
+        if name == 'master':
+            if not MASTER_PATH.exists():
+                return {}
+            return load_json(MASTER_PATH)
+        p = get_variant_path(DATA_DIR, name)
+        return load_json(p) if p.exists() else {}
+
+    for name in names:
+        data = _load_variant(name)
+        meta = data.get('_meta') if isinstance(data, dict) else None
+        meta = meta if isinstance(meta, dict) else {}
+        jd = meta.get('jd_analysis') if isinstance(meta, dict) else None
+        jd = jd if isinstance(jd, dict) else {}
+
+        ms = jd.get('match_score')
+        if isinstance(ms, (int, float)):
+            match_scores.append(float(ms))
+
+        gaps = jd.get('gaps')
+        if isinstance(gaps, list):
+            gaps_counter.update([str(x).strip().lower() for x in gaps if str(x).strip()])
+
+        kws = jd.get('top_keywords')
+        if isinstance(kws, list):
+            kw_counter.update([str(x).strip().lower() for x in kws if str(x).strip()])
+
+        exports = meta.get('exports') if isinstance(meta, dict) else None
+        exports = exports if isinstance(exports, list) else []
+
+        per_variant.append({
+            'name': name,
+            'has_jd_analysis': bool(jd),
+            'match_score': ms if isinstance(ms, (int, float)) else None,
+            'gaps_count': len(gaps) if isinstance(gaps, list) else 0,
+            'keywords_count': len(kws) if isinstance(kws, list) else 0,
+            'exports_count': len(exports),
+        })
+
+    stats = {
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'targets_count': len(variants),
+        'variants_total': len(names),
+        'avg_match_score': round(mean(match_scores), 2) if match_scores else None,
+        'top_gaps': gaps_counter.most_common(15),
+        'top_keywords': kw_counter.most_common(15),
+        'per_variant': per_variant,
+    }
+
+    # Best-effort local cache
+    try:
+        save_json(DATA_DIR / 'analytics.json', stats)
+    except Exception as e:
+        logger.warning(f"analytics cache write skipped: {e}")
+
+    return jsonify({'success': True, 'data': stats})
 
 
 @app.route('/health', methods=['GET'])

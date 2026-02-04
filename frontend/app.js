@@ -440,6 +440,7 @@ function switchView(viewName, evt) {
     const titles = {
         'config': 'API配置',
         'dashboard': 'Dashboard',
+        'refinery': 'Refinery',
         'import': '导入PDF',
         'edit': '编辑简历',
         'chat': 'Chat / JD',
@@ -461,6 +462,8 @@ function switchView(viewName, evt) {
             }
             renderDashboard();
         })();
+    } else if (viewName === 'refinery') {
+        loadRefineryAnalytics();
     }
 }
 
@@ -914,6 +917,47 @@ function renderDashboard() {
     _dashSetPre('dashboard-jd-parse', meta.jd_parse || null);
     _dashSetPre('dashboard-jd-analysis', meta.jd_analysis || null);
     _dashSetPre('dashboard-exports', exports);
+}
+
+async function loadRefineryAnalytics() {
+    const status = document.getElementById('refinery-status');
+    const sumEl = document.getElementById('refinery-summary');
+    const topEl = document.getElementById('refinery-top');
+    const perEl = document.getElementById('refinery-per-variant');
+
+    if (status) status.textContent = 'Loading…';
+    if (sumEl) sumEl.textContent = '';
+    if (topEl) topEl.textContent = '';
+    if (perEl) perEl.textContent = '';
+
+    try {
+        const res = await apiCall('/api/refinery/analytics', { timeoutMs: 15000 });
+        const data = res && res.data ? res.data : null;
+        if (!data) throw new Error('empty_response');
+
+        const summary = {
+            generated_at: data.generated_at,
+            targets_count: data.targets_count,
+            variants_total: data.variants_total,
+            avg_match_score: data.avg_match_score,
+        };
+
+        const top = {
+            top_gaps: data.top_gaps || [],
+            top_keywords: data.top_keywords || [],
+        };
+
+        if (status) status.textContent = 'OK (local cache: data/analytics.json)';
+        if (sumEl) sumEl.textContent = JSON.stringify(summary, null, 2);
+        if (topEl) topEl.textContent = JSON.stringify(top, null, 2);
+        if (perEl) perEl.textContent = JSON.stringify(data.per_variant || [], null, 2);
+    } catch (e) {
+        if (status) status.textContent = 'Failed: ' + e.message;
+        if (sumEl) sumEl.textContent = '';
+        if (topEl) topEl.textContent = '';
+        if (perEl) perEl.textContent = '';
+        showNotification('Refinery 加载失败：' + e.message, 'error');
+    }
 }
 
 async function refreshStatus() {
