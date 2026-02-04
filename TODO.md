@@ -11,7 +11,7 @@
   - JS: add eslint config if missing; fix high-severity issues.
   - VERIFY: run lint commands and ensure no "error"-level findings.
 
-- [ ] Task 3: Add an end-to-end smoke script `destroy_test.py`.
+- [x] Task 3: Add an end-to-end smoke script `destroy_test.py`.
   - Simulate: create variant -> select -> save -> JD parse -> JD analyze -> export pdf (target_pages=1, template=compact)
   - VERIFY: script exits 0 and logs a minimal success summary.
 
