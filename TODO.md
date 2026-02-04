@@ -3,7 +3,7 @@
 > Goal: Make V1.0 shippable (stable, clean, documented) without over-design.
 > Rule: Each task must include a VERIFY step (smoke test / lint / script run).
 
-- [ ] Task 1: Global cleanup — remove noisy debug logs (console.log / print) and dead code.
+- [x] Task 1: Global cleanup — remove noisy debug logs (console.log / print) and dead code.
   - VERIFY: run `python3 -m py_compile backend/api_server.py app.py` and `node -c frontend/app.js frontend/chat.js frontend/import.js`
 
 - [ ] Task 2: Add basic lint discipline (lightweight).

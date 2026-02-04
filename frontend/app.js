@@ -13,6 +13,15 @@ function getApiBase() {
 
 const API_BASE = getApiBase();
 
+// Debug logging (enable with ?debug=1)
+const DEBUG = (typeof window !== 'undefined'
+    && window.location
+    && new URLSearchParams(window.location.search).get('debug') === '1');
+
+function debugLog(...args) {
+    if (DEBUG) console.log(...args);
+}
+
 // 全局状态
 let currentResumeData = null;
 let isConfigHealthy = false;
@@ -57,7 +66,7 @@ async function apiCall(url, options = {}) {
     const method = options.method || 'GET';
     const timeoutMs = options.timeoutMs || 15000;
 
-    console.log(`[API] ${method} ${fullUrl}`);
+    debugLog(`[API] ${method} ${fullUrl}`);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -84,7 +93,7 @@ async function apiCall(url, options = {}) {
             throw new Error(result.error);
         }
 
-        console.log('[API Success]', result);
+        debugLog('[API Success]', result);
         return result;
     } catch (error) {
         if (error.name === 'AbortError') {
@@ -576,7 +585,7 @@ async function loadPreview() {
     try {
         // 如果没有数据，先加载
         if (!currentResumeData) {
-            console.log('[Preview] 数据为空，先加载简历数据...');
+            debugLog('[Preview] 数据为空，先加载简历数据...');
             await loadResumeData();
         }
 
@@ -841,7 +850,7 @@ async function refreshStatus() {
 
 // 页面加载完成后初始化
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('AI简历更新助手已启动');
+    debugLog('AI简历更新助手已启动');
     refreshStatus();
     await initVariants({ silent: true });
 });
