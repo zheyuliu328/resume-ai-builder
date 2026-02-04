@@ -537,15 +537,54 @@ def export_pdf():
     template = data.get('template', 'modern')
 
     out = builder.export_pdf(filename, target_pages=target_pages, template=template)
-    if out and isinstance(out, dict) and out.get('filename'):
-        return jsonify({
-            'success': True,
-            'filename': out.get('filename'),
+    if not (out and isinstance(out, dict) and out.get('filename')):
+        return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
+
+    meta = out.get('meta') or {}
+
+    # Persist export history in _meta (explicit user action: export)
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        export_rec = {
+            'ts': ts,
             'target_pages': int(target_pages) if target_pages else 1,
             'template': template,
-            'meta': out.get('meta') or {},
-        })
-    return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
+            'pages': meta.get('pages'),
+            'trimmed': bool(meta.get('trimmed')),
+            'trim_summary': meta.get('trim_summary') or '',
+            'filename': out.get('filename'),
+        }
+
+        if not isinstance(builder.resume_data, dict):
+            builder.resume_data = {}
+        meta_obj = builder.resume_data.get('_meta')
+        if not isinstance(meta_obj, dict):
+            meta_obj = {}
+        exports = meta_obj.get('exports')
+        if not isinstance(exports, list):
+            exports = []
+        exports.insert(0, export_rec)
+        meta_obj['exports'] = exports[:20]
+        builder.resume_data['_meta'] = meta_obj
+
+        active = read_active_variant(DATA_DIR) or 'master'
+        if active == 'master':
+            save_json(MASTER_PATH, builder.resume_data)
+        else:
+            save_json(get_variant_path(DATA_DIR, active), builder.resume_data)
+
+        snap_ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        write_snapshot(DATA_DIR, active, builder.resume_data, ts=snap_ts)
+    except Exception as e:
+        logger.warning(f"export meta persist skipped: {e}")
+
+    return jsonify({
+        'success': True,
+        'filename': out.get('filename'),
+        'target_pages': int(target_pages) if target_pages else 1,
+        'template': template,
+        'meta': meta,
+    })
 
 
 @app.route('/api/export/pdf/download', methods=['GET'])

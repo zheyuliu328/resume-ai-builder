@@ -71,7 +71,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: run `python3 destroy_test.py` plus `python3 tools/verify_history.py` (create/save/list/rollback).
   - Rationale: ADR `docs/adr/0001-local-first-json-variants-store.md` (git-friendly rollback semantics) + `VISION.md` §Local-first/§Safety.
 
-- [ ] Task 3: Persist the “application evidence chain” and export history in `_meta`, and surface it in Export UI.
+- [x] Task 3: Persist the “application evidence chain” and export history in `_meta`, and surface it in Export UI.
   - Standardize `_meta` schema for targets:
     - `_meta.jd_parse`, `_meta.jd_analysis`, `_meta.jd_text`
     - `_meta.exports[]`: append `{ts, target_pages, template, pages, trimmed, trim_summary, filename}` per export
