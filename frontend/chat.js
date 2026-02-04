@@ -2,6 +2,83 @@
 
 let pendingResumeData = null;
 
+function renderOnboardingFromMeta(resumeData) {
+  const box = document.getElementById('chat-system');
+  const titleEl = document.getElementById('chat-system-title');
+  const bodyEl = document.getElementById('chat-system-body');
+  const actionsEl = document.getElementById('chat-system-actions');
+
+  if (!box || !titleEl || !bodyEl || !actionsEl) return;
+
+  const meta = resumeData && resumeData._meta ? resumeData._meta : null;
+  const isNew = !!(meta && meta.is_new);
+  const parse = meta && meta.jd_parse ? meta.jd_parse : null;
+  const analysis = meta && meta.jd_analysis ? meta.jd_analysis : null;
+
+  if (!isNew || !parse) {
+    box.style.display = 'none';
+    return;
+  }
+
+  const company = parse.company_name || 'Unknown';
+  const role = parse.role_name || 'Role';
+  const slug = parse.slug || '';
+
+  const keywords = analysis && Array.isArray(analysis.top_keywords) ? analysis.top_keywords.slice(0, 10) : [];
+  const gaps = analysis && Array.isArray(analysis.gaps) ? analysis.gaps.slice(0, 6) : [];
+  const match = (analysis && typeof analysis.match_score !== 'undefined') ? analysis.match_score : null;
+
+  titleEl.textContent = `👋 New Target: ${company} / ${role}${slug ? ` (${slug})` : ''}`;
+
+  const lines = [];
+  if (match !== null) lines.push(`Match score: ${match}`);
+  if (keywords.length) lines.push(`Keywords: ${keywords.join(', ')}`);
+  if (gaps.length) {
+    lines.push('Top gaps:');
+    gaps.forEach((g) => lines.push(`- ${g}`));
+  }
+  if (parse.summary) lines.push(`\nJD summary: ${parse.summary}`);
+
+  bodyEl.textContent = lines.join('\n');
+
+  // Actions: prefill instruction and run refine (still user-controlled apply)
+  actionsEl.innerHTML = '';
+  const mkBtn = (label, instruction) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-secondary';
+    b.textContent = label;
+    b.onclick = () => {
+      const ta = document.getElementById('chat-instruction');
+      if (ta) {
+        ta.value = instruction;
+        ta.focus();
+      }
+    };
+    return b;
+  };
+
+  actionsEl.appendChild(mkBtn('重写 Summary（更贴 JD）', `Based on this JD, rewrite the resume summary (personal.summary) to better match the role. Keep it concise and factual.`));
+  actionsEl.appendChild(mkBtn('优化最近一段经历（量化+关键词）', `Improve the most recent experience section to better match the JD. Add metrics if possible, keep claims factual, and align wording to JD keywords.`));
+  actionsEl.appendChild(mkBtn('精简到 1 页（更硬核）', `Condense the resume for this JD to fit one page by prioritizing the most relevant experiences and removing weaker bullets. Keep schema consistent.`));
+
+  const go = document.createElement('button');
+  go.className = 'btn btn-primary';
+  go.textContent = '生成改动建议';
+  go.onclick = () => chatRefine();
+  actionsEl.appendChild(go);
+
+  box.style.display = 'block';
+}
+
+// Called by app.js after variant switch/create
+function onVariantChangedForChat(resumeData) {
+  try {
+    renderOnboardingFromMeta(resumeData || {});
+  } catch (e) {
+    console.warn('[chat] onboarding render failed', e);
+  }
+}
+
 async function chatRefine() {
   if (!isConfigHealthy) {
     showNotification('请先完成 API 配置并测试连接', 'error');

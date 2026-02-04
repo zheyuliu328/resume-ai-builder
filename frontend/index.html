@@ -386,6 +386,13 @@
                         <h3 style="margin-bottom: 10px;">💬 Chat / JD Targeting</h3>
                         <p class="muted" style="margin-bottom: 14px;">用自然语言指令优化简历某部分；或粘贴 JD 做匹配度与缺口分析。输出会先预览，点 Apply 才会写入当前简历。</p>
 
+                        <!-- System onboarding message for newly created JD variants -->
+                        <div id="chat-system" style="display:none;margin:12px 0 16px 0;padding:12px 12px;border-radius:14px;border:1px solid rgba(104,167,255,0.25);background: linear-gradient(90deg, rgba(104,167,255,0.12), rgba(99,255,181,0.08));">
+                            <div id="chat-system-title" style="font-weight:650;margin-bottom:6px;"></div>
+                            <div id="chat-system-body" class="muted" style="white-space:pre-wrap;line-height:1.5;"></div>
+                            <div id="chat-system-actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"></div>
+                        </div>
+
                         <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 14px;">
                             <div>
                                 <label class="muted" style="display:block;margin-bottom:6px;">Chat 指令</label>
