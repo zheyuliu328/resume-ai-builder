@@ -85,7 +85,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: add `python3 tools/verify_trim_relevance.py` (feeds fake JD analysis + resume; asserts kept bullets include top keywords).
   - Rationale: `VISION.md` Near-term targets (“更智能的 Trim（基于 JD relevance）”) + §Safety (“可解释”).
 
-- [ ] Task 5: One-command smoke verification for key paths.
+- [x] Task 5: One-command smoke verification for key paths.
   - Add `tools/smoke_verify.sh` (or `python3 tools/smoke_verify.py`) to run compile/lint/smoke steps consistently.
   - Document it (briefly) so a human can repeatably verify V1.1.
   - VERIFY: `bash tools/smoke_verify.sh` exits 0.
