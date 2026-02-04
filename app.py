@@ -89,7 +89,7 @@ class ResumeBuilder:
             return data
         return default
     
-    def generate_html(self, *, template: str = 'modern', style: dict | None = None, data: dict | None = None) -> str:
+    def generate_html(self, *, template: str = 'modern', style=None, data=None) -> str:
         """生成专业的A4简历HTML
 
         Params:
@@ -424,7 +424,7 @@ class ResumeBuilder:
             {'max_experiences': 2, 'max_bullets': 2},
         ]
 
-        def apply_trim(data: dict, trim: dict | None) -> dict:
+        def apply_trim(data: dict, trim):
             if not trim:
                 return data
             d = copy.deepcopy(data)
