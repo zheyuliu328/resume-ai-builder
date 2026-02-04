@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# 简历数据和输出
+resume_data.json
+resume.html
+resume.pdf
+temp_resume.html
+config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+.playwright/
+
+# 环境变量和日志
+.env
+app.log
+
+# Local backups
+.backups/

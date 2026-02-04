@@ -1,0 +1,19 @@
+{
+  "name": "resume-ai-builder-frontend",
+  "version": "1.0.0",
+  "description": "AI简历更新助手 - Electron桌面应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": ["resume", "ai", "electron", "vue"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

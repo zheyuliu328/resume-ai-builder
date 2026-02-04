@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI简历更新助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+        
+        .container { display: flex; height: 100vh; }
+        
+        /* 侧边栏 */
+        .sidebar { width: 260px; background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%); color: white; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-header h1 { font-size: 20px; font-weight: 600; }
+        .sidebar-nav { flex: 1; padding: 16px 0; }
+        .nav-item { padding: 12px 24px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 12px; }
+        .nav-item:hover { background: rgba(255,255,255,0.1); }
+        .nav-item.active { background: rgba(255,255,255,0.15); border-left: 3px solid #60a5fa; }
+        .nav-icon { font-size: 18px; }
+        
+        /* 主内容区 */
+        .main-content { flex: 1; display: flex; flex-direction: column; background: #f3f4f6; }
+        .topbar { background: white; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+        .topbar h2 { font-size: 18px; color: #1f2937; }
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        
+        .content-area { flex: 1; overflow-y: auto; padding: 24px; }
+        .view { display: none; }
+        .view.active { display: block; }
+        
+        /* 配置视图 */
+        .config-form { background: white; padding: 24px; border-radius: 8px; max-width: 600px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #374151; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+        .form-group textarea { min-height: 100px; resize: vertical; }
+        
+        /* 编辑视图 */
+        .edit-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+        .edit-panel { background: white; padding: 24px; border-radius: 8px; }
+        .edit-panel h3 { margin-bottom: 16px; color: #1f2937; }
+        .edit-panel textarea { min-height: 200px; }
+        
+        /* 预览视图 */
+        .preview-container { background: white; padding: 40px; border-radius: 8px; max-width: 900px; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        /* 加载状态 */
+        .loading { text-align: center; padding: 40px; color: #6b7280; }
+        .spinner { border: 3px solid #f3f4f6; border-top: 3px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 通知 */
+        .notification { position: fixed; top: 20px; right: 20px; background: white; padding: 16px 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; z-index: 1000; }
+        .notification.show { display: block; animation: slideIn 0.3s; }
+        .notification.success { border-left: 4px solid #10b981; }
+        .notification.error { border-left: 4px solid #ef4444; }
+        @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>🚀 AI简历助手</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-view="config" onclick="switchView('config')">
+                    <span class="nav-icon">⚙️</span>
+                    <span>API配置</span>
+                </div>
+                <div class="nav-item" data-view="edit" onclick="switchView('edit')">
+                    <span class="nav-icon">✏️</span>
+                    <span>编辑简历</span>
+                </div>
+                <div class="nav-item" data-view="preview" onclick="switchView('preview')">
+                    <span class="nav-icon">👁️</span>
+                    <span>预览</span>
+                </div>
+                <div class="nav-item" onclick="translateResume()">
+                    <span class="nav-icon">🌐</span>
+                    <span>多语言翻译</span>
+                </div>
+                <div class="nav-item" onclick="exportPDF()">
+                    <span class="nav-icon">📄</span>
+                    <span>导出PDF</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="topbar">
+                <h2 id="view-title">API配置</h2>
+                <div>
+                    <button class="btn btn-secondary" onclick="loadResume()">刷新</button>
+                    <button class="btn btn-primary" onclick="saveResume()">保存</button>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- 配置视图 -->
+                <div id="config-view" class="view active">
+                    <div class="config-form">
+                        <h3 style="margin-bottom: 24px;">🔧 AI API 配置</h3>
+                        
+                        <div class="form-group">
+                            <label>API 供应商</label>
+                            <select id="api-provider" onchange="updateProviderDefaults()">
+                                <option value="anthropic">Anthropic (官方)</option>
+                                <option value="openai-compatible">OpenAI Compatible (第三方)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>API Key <span style="color:#ef4444">*</span></label>
+                            <input type="password" id="api-key" placeholder="sk-ant-xxx 或第三方Key">
+                            <small style="color:#6b7280;font-size:12px;">注意：第三方服务请创建按次分组的Key</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>基础 URL</label>
+                            <input type="text" id="base-url" value="https://api.anthropic.com" placeholder="https://api.anthropic.com">
+                            <small style="color:#6b7280;font-size:12px;">第三方示例：https://api.xstx.info/v1</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>API 路径（可选）</label>
+                            <input type="text" id="api-path" placeholder="留空使用默认路径">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>模型 ID</label>
+                            <input type="text" id="model" value="claude-sonnet-4-5-20250929">
+                            <small style="color:#6b7280;font-size:12px;">可选：claude-opus-4-5-20251101</small>
+                        </div>
+                        
+                        <div style="display:flex;gap:12px;margin-top:24px;">
+                            <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
+                            <button class="btn btn-secondary" onclick="testConnection()">🔗 测试连接</button>
+                        </div>
+                        
+                        <div id="config-status" style="margin-top:16px;padding:12px;border-radius:6px;display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- 编辑视图 -->
+                <div id="edit-view" class="view">
+                    <div class="edit-grid">
+                        <div class="edit-panel">
+                            <h3>AI增量更新</h3>
+                            <div class="form-group">
+                                <label>更新部分</label>
+                                <select id="update-section">
+                                    <option value="experience">工作经历</option>
+                                    <option value="education">教育经历</option>
+                                    <option value="projects">项目经历</option>
+                                    <option value="skills">技能</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>新增内容</label>
+                                <textarea id="update-content" placeholder="例如：2024年7月-12月在字节跳动担任数据分析实习生..."></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="updateSection()">AI优化并更新</button>
+                        </div>
+
+                        <div class="edit-panel">
+                            <h3>当前简历数据</h3>
+                            <div id="resume-data" style="font-size: 12px; color: #6b7280; max-height: 400px; overflow-y: auto;">
+                                <div class="loading">
+                                    <div class="spinner"></div>
+                                    <p>加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 预览视图 -->
+                <div id="preview-view" class="view">
+                    <div class="preview-container" id="preview-content">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>生成预览中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知 -->
+    <div id="notification" class="notification"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

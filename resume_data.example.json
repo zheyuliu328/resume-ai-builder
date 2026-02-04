@@ -1,0 +1,57 @@
+{
+  "personal": {
+    "name": "张三",
+    "email": "zhangsan@example.com",
+    "phone": "138-0000-0000",
+    "summary": "具有3年数据分析经验的专业人士，擅长Python、SQL和机器学习，致力于通过数据驱动决策创造商业价值"
+  },
+  "education": [
+    {
+      "school": "清华大学",
+      "degree": "计算机科学与技术 本科",
+      "period": "2018.09 - 2022.06",
+      "details": "GPA: 3.8/4.0 | 核心课程：数据结构、算法、机器学习、数据库系统"
+    }
+  ],
+  "experience": [
+    {
+      "company": "字节跳动",
+      "position": "数据分析师",
+      "period": "2022.07 - 至今",
+      "highlights": [
+        "负责用户增长分析，通过A/B测试优化转化率，提升新用户留存率15%",
+        "使用Python和SQL处理日均百万级数据，构建自动化数据分析流程",
+        "搭建实时监控仪表板，帮助产品团队快速发现和解决问题，提升决策效率30%"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "供应链金融审计系统",
+      "period": "2024.06 - 2024.12",
+      "description": "基于Python+FastAPI+PostgreSQL的企业级审计系统",
+      "highlights": [
+        "实现实时风险监控和异常检测，准确率达95%",
+        "使用图数据库分析交易网络，发现潜在风险关联",
+        "获得校级创新创业大赛一等奖"
+      ]
+    },
+    {
+      "name": "AI简历生成器",
+      "period": "2024.01 - 2024.03",
+      "description": "集成Claude API的智能简历优化工具",
+      "highlights": [
+        "支持增量更新和AI内容优化",
+        "自动生成A4格式PDF，支持多种模板",
+        "GitHub开源项目，获得100+ stars"
+      ]
+    }
+  ],
+  "skills": [
+    "编程语言：Python, SQL, JavaScript",
+    "数据分析：Pandas, NumPy, Scikit-learn, PyTorch",
+    "数据库：PostgreSQL, MySQL, Redis",
+    "工具框架：FastAPI, Flask, Git, Docker",
+    "语言能力：英语CET-6，流利的听说读写能力"
+  ]
+}
