@@ -79,7 +79,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
   - VERIFY: run `python3 destroy_test.py` and confirm target variant JSON contains `_meta.exports[0]`; JS syntax check: `node -c frontend/app.js frontend/chat.js`.
   - Rationale: `VISION.md` Near-term targets (“投递证据链”“Export Cockpit 更完善”) + §Observability.
 
-- [ ] Task 4: Relevance-based Trim v0 (no ML): trim least-relevant bullets first + produce a trim summary.
+- [x] Task 4: Relevance-based Trim v0 (no ML): trim least-relevant bullets first + produce a trim summary.
   - When `_meta.jd_analysis.top_keywords` exists, score bullets by keyword hits; drop lowest-scoring first.
   - Emit `trim_summary` (counts + categories) so the UI can explain what changed.
   - VERIFY: add `python3 tools/verify_trim_relevance.py` (feeds fake JD analysis + resume; asserts kept bullets include top keywords).
