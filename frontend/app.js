@@ -677,35 +677,130 @@ async function translateResume() {
     }
 }
 
-// 导出PDF
-async function exportPDF() {
+// Export UI state
+let exportState = {
+    pages: 1,
+    template: 'modern',
+    busy: false,
+};
+
+function _setBtnActive(id, active) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.borderColor = active ? 'rgba(99,255,181,0.35)' : 'var(--border)';
+    el.style.background = active ? 'rgba(99,255,181,0.10)' : 'rgba(255,255,255,0.06)';
+}
+
+function setExportPages(n) {
+    exportState.pages = n;
+    _setBtnActive('btn-pages-1', n === 1);
+    _setBtnActive('btn-pages-2', n === 2);
+}
+
+function setExportTemplate(tpl) {
+    exportState.template = tpl;
+    _setBtnActive('btn-tpl-modern', tpl === 'modern');
+    _setBtnActive('btn-tpl-compact', tpl === 'compact');
+}
+
+function closeExportPopover() {
+    const pop = document.getElementById('export-popover');
+    if (pop) pop.style.display = 'none';
+}
+
+function toggleExportPopover(evt) {
+    const pop = document.getElementById('export-popover');
+    if (!pop) return;
+
+    if (pop.style.display === 'block') {
+        closeExportPopover();
+        return;
+    }
+
+    // Position near click
+    const r = evt && evt.currentTarget ? evt.currentTarget.getBoundingClientRect() : null;
+    const x = r ? (r.right + 12) : 320;
+    const y = r ? (r.top + 6) : 120;
+    pop.style.left = `${Math.min(x, window.innerWidth - 20)}px`;
+    pop.style.top = `${Math.min(y, window.innerHeight - 20)}px`;
+
+    pop.style.display = 'block';
+
+    // default selections
+    setExportPages(exportState.pages || 1);
+    setExportTemplate(exportState.template || 'modern');
+}
+
+// 导出PDF（Smart PDF + fit loop）
+async function exportPDFSmart() {
     if (!isConfigHealthy) {
         showNotification('请先在「API配置」中保存并测试连接', 'error');
         switchView('config');
         return;
     }
 
-    showNotification('正在生成PDF...', 'success');
+    if (exportState.busy) return;
+    exportState.busy = true;
+
+    const btn = document.getElementById('export-download');
+    const hint = document.getElementById('export-hint');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Generating…';
+    }
+
+    let slowToastTimer = setTimeout(() => {
+        showNotification('正在压缩排版，请稍候…', 'success');
+        if (hint) {
+            hint.style.display = 'inline';
+            hint.textContent = 'Fitting…';
+        }
+    }, 3000);
 
     try {
-        const targetPages = prompt('PDF 目标页数：1 或 2', '1');
-        if (!targetPages) return;
-        const template = prompt('模板：modern 或 compact', 'modern');
-        if (!template) return;
-
         const result = await apiCall('/api/export/pdf', {
             method: 'POST',
-            body: JSON.stringify({ resume_data: currentResumeData, target_pages: Number(targetPages), template: String(template).trim() }),
-            timeoutMs: 180000,
+            body: JSON.stringify({
+                resume_data: currentResumeData,
+                target_pages: Number(exportState.pages || 1),
+                template: String(exportState.template || 'modern').trim(),
+            }),
+            timeoutMs: 240000,
         });
 
-        if (result.success) {
-            showNotification(`PDF已导出：${result.filename}`);
-        } else {
-            showNotification('导出失败：' + (result.error || '未知错误'), 'error');
+        if (!result.success) {
+            throw new Error(result.error || '导出失败');
         }
-    } catch (error) {
-        showNotification('请求失败：' + error.message, 'error');
+
+        const meta = result.meta || {};
+        const trimmed = !!meta.trimmed;
+
+        // Filename compliance: add _TRIMMED if content trim happened
+        const rawName = (result.filename || 'resume.pdf');
+        const base = rawName.replace(/\.pdf$/i, '');
+        const finalName = trimmed ? `${base}_TRIMMED.pdf` : rawName;
+
+        // Download file
+        const url = `${API_BASE}/api/export/pdf/download?filename=${encodeURIComponent(rawName)}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = finalName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        showNotification(`PDF 已生成${trimmed ? '（已裁剪 TRIMMED）' : ''}`);
+        closeExportPopover();
+    } catch (e) {
+        showNotification('导出失败：' + e.message, 'error');
+    } finally {
+        clearTimeout(slowToastTimer);
+        exportState.busy = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Download';
+        }
+        if (hint) hint.style.display = 'none';
     }
 }
 

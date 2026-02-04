@@ -2,7 +2,7 @@
 """
 Flask API服务 - 为Electron前端提供RESTful接口
 """
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 
 # variants_store is a local helper (imported via sys.path below)
@@ -454,10 +454,37 @@ def export_pdf():
     target_pages = data.get('target_pages', 1)
     template = data.get('template', 'modern')
 
-    filename = builder.export_pdf(filename, target_pages=target_pages, template=template)
-    if filename:
-        return jsonify({'success': True, 'filename': filename, 'target_pages': int(target_pages) if target_pages else 1, 'template': template})
+    out = builder.export_pdf(filename, target_pages=target_pages, template=template)
+    if out and isinstance(out, dict) and out.get('filename'):
+        return jsonify({
+            'success': True,
+            'filename': out.get('filename'),
+            'target_pages': int(target_pages) if target_pages else 1,
+            'template': template,
+            'meta': out.get('meta') or {},
+        })
     return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
+
+
+@app.route('/api/export/pdf/download', methods=['GET'])
+@handle_errors
+def export_pdf_download():
+    """Download an exported PDF by filename."""
+    filename = (request.args.get('filename') or '').strip()
+    if not filename:
+        return jsonify({'success': False, 'error': 'missing_filename'}), 400
+
+    # Basic safety: only allow .pdf and no path separators
+    if '/' in filename or '\\' in filename or not filename.lower().endswith('.pdf'):
+        return jsonify({'success': False, 'error': 'bad_filename'}), 400
+
+    path = (ROOT_DIR / filename).resolve()
+    if not str(path).startswith(str(ROOT_DIR)):
+        return jsonify({'success': False, 'error': 'bad_path'}), 400
+    if not path.exists():
+        return jsonify({'success': False, 'error': 'file_not_found'}), 404
+
+    return send_file(str(path), as_attachment=True, download_name=filename, mimetype='application/pdf')
 
 
 @app.route('/api/variants', methods=['GET'])
