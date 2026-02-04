@@ -10,6 +10,19 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
 
 ---
 
+# Logistics Layer (Release Ops)
+
+- [x] Task 0: Setup GitHub Actions for Auto-Release (Logistics Layer).
+  - Add `.github/workflows/release.yml`:
+    - Trigger: merge to `main` with commit message containing `Release v` OR manual `workflow_dispatch`
+    - Steps: extract version; create annotated tag; create GitHub Release with notes from `RELEASE_NOTES_vX.Y.Z.md` (preferred) or fallback to a `ROADMAP.md` section; build + push Docker image to `ghcr.io`
+    - Use least-privilege permissions; no external secrets beyond `GITHUB_TOKEN`.
+    - Risk controls: do NOT auto-merge PRs; release only on explicit `Release vX.Y.Z` merge commit or manual dispatch.
+  - Add `.github/workflows/auto-branch.yml` (optional): trigger after release; create next planning branch `feat/vX.Y-planning` BUT keep it disabled behind `workflow_dispatch` initially.
+  - VERIFY: validate workflow YAML (e.g. `ruby -ryaml -e "YAML.load_file(...)"`) and ensure docs in-workflow are clear.
+
+---
+
 # Operation V1.0 Polish
 
 > Goal: Make V1.0 shippable (stable, clean, documented) without over-design.

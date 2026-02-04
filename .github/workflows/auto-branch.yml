@@ -1,0 +1,42 @@
+name: Auto Branch (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Base branch"
+        required: false
+        default: main
+        type: string
+      planning_branch:
+        description: "Planning branch name (e.g., feat/v1.2-planning)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create planning branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ inputs.base }}"
+          branch="${{ inputs.planning_branch }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "$base"
+          git checkout -b "$branch" "origin/$base"
+
+          # Human gate: branch is created but nothing is merged automatically.
+          git push origin "$branch"
