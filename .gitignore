@@ -22,6 +22,10 @@ config.json
 *.swo
 *~
 
+# Node
+node_modules/
+frontend/node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -35,3 +39,7 @@ app.log
 
 # Local backups
 .backups/
+
+# Local app data
+.tmp/
+data/

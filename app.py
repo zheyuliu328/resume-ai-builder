@@ -5,7 +5,6 @@ AI简历更新助手
 """
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 import anthropic
 
@@ -89,10 +88,21 @@ class ResumeBuilder:
             return data
         return default
     
-    def generate_html(self) -> str:
-        """生成专业的A4简历HTML"""
+    def generate_html(self, *, template: str = 'modern', style=None, data=None) -> str:
+        """生成专业的A4简历HTML
+
+        Params:
+          - template: 'modern' | 'compact'
+          - style: CSS tuning knobs used by the fit engine (font_size_pt, line_height, padding_cm, section_gap_px)
+          - data: optional resume_data override (e.g., trimmed version for fitting)
+        """
+        style = style or {}
+        template = (template or 'modern').strip().lower()
+        # Allow generating from an overridden dataset (fit engine)
+        resume_data = data if isinstance(data, dict) else self.resume_data
+
         # 安全获取个人信息
-        personal = self.resume_data.get('personal', {})
+        personal = resume_data.get('personal', {})
         if isinstance(personal, str):
             personal = {'name': personal}
         
@@ -166,7 +176,7 @@ class ResumeBuilder:
             </div>'''
         
         # 渲染技能
-        skills_data = self.resume_data.get('skills', {})
+        skills_data = resume_data.get('skills', {})
         if isinstance(skills_data, list):
             # 旧格式：列表
             skills_html = '<p>' + ', '.join([s for s in skills_data if isinstance(s, str)]) + '</p>'
@@ -192,6 +202,19 @@ class ResumeBuilder:
             contact_parts.append(f'<a href="{linkedin_url}">{linkedin}</a>')
         contact_line = ' │ '.join(contact_parts)
         
+        # Style knobs (fit engine)
+        font_size_pt = float(style.get('font_size_pt', 9.5))
+        line_height = float(style.get('line_height', 1.35))
+        padding_cm = float(style.get('padding_cm', 1.0))
+        section_gap_px = float(style.get('section_gap_px', 8))
+
+        # Template defaults
+        if template == 'compact':
+            font_size_pt = float(style.get('font_size_pt', 9.0))
+            line_height = float(style.get('line_height', 1.25))
+            padding_cm = float(style.get('padding_cm', 0.85))
+            section_gap_px = float(style.get('section_gap_px', 6))
+
         html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -205,8 +228,8 @@ class ResumeBuilder:
         /* 页面和字体基础设置 - 专业A4简历 */
         body {{
             font-family: 'Lato', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            font-size: 9.5pt;
-            line-height: 1.35;
+            font-size: {font_size_pt}pt;
+            line-height: {line_height};
             background-color: #ffffff;
             color: #1a1a1a;
             margin: 0;
@@ -217,7 +240,7 @@ class ResumeBuilder:
             width: 100%;
             max-width: 210mm;
             min-height: 297mm;
-            padding: 1cm;
+            padding: {padding_cm}cm;
             margin: 0 auto;
             background-color: #ffffff;
             box-sizing: border-box;
@@ -226,7 +249,7 @@ class ResumeBuilder:
         /* 顶部姓名和联系信息 */
         .header {{
             text-align: center;
-            margin-bottom: 8px;
+            margin-bottom: {section_gap_px}px;
         }}
         .header h1 {{
             font-size: 24pt;
@@ -304,7 +327,7 @@ class ResumeBuilder:
             .resume-container {{ width: 210mm; min-height: 297mm; padding: 6mm 8mm; display: flex; flex-direction: column; }}
             .content {{ flex: 1; display: flex; flex-direction: column; justify-content: space-between; }}
             h2 {{ margin: 10px 0 5px 0; }}
-            .entry {{ break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; }}
+            .entry {{ break-inside: avoid; page-break-inside: avoid; margin-bottom: {section_gap_px}px; }}
         }}
     </style>
 </head>
@@ -319,13 +342,13 @@ class ResumeBuilder:
         {f'<h2>PROFILE</h2><p style="margin-bottom: 10px;">{profile}</p>' if profile else ''}
         
         <h2>EDUCATION</h2>
-        {self._safe_render_list(self.resume_data.get('education', []), render_education)}
+        {self._safe_render_list(resume_data.get('education', []), render_education)}
         
         <h2>PROFESSIONAL EXPERIENCE</h2>
-        {self._safe_render_list(self.resume_data.get('experience', []), render_experience)}
+        {self._safe_render_list(resume_data.get('experience', []), render_experience)}
         
         <h2>PROJECTS</h2>
-        {self._safe_render_list(self.resume_data.get('projects', []), render_project)}
+        {self._safe_render_list(resume_data.get('projects', []), render_project)}
         
         <h2>SKILLS</h2>
         {skills_html}
@@ -343,25 +366,137 @@ class ResumeBuilder:
             f.write(html)
         return filename
     
-    def export_pdf(self, filename: str = "resume.pdf"):
-        """导出PDF文件（需要安装playwright）"""
+    def export_pdf(self, filename: str = "resume.pdf", *, target_pages: int = 1, template: str = 'modern'):
+        """导出PDF文件（需要安装playwright）。
+
+        Phase 2: Smart PDF (fit engine)
+        - target_pages: 1 or 2
+        - template: 'modern' | 'compact'
+
+        Returns:
+          { "filename": str, "meta": { target_pages, template, pages, trimmed, style, trim } }
+
+        Strategy:
+        1) Try CSS shrink (font-size/line-height/padding/spacing)
+        2) If still too long, trim content (reduce experiences + bullets)
+        """
         try:
             from playwright.sync_api import sync_playwright
-            
-            html_file = self.export_html("temp_resume.html")
-            
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page()
-                page.goto(f"file://{os.path.abspath(html_file)}")
-                page.pdf(path=filename, format="A4", print_background=True)
-                browser.close()
-            
-            os.remove(html_file)
-            return filename
         except ImportError:
             print("请安装playwright: pip install playwright && playwright install chromium")
             return None
+
+        try:
+            from pypdf import PdfReader
+        except Exception:
+            PdfReader = None
+
+        import tempfile
+        import copy
+
+        target_pages = int(target_pages) if target_pages else 1
+        if target_pages not in (1, 2):
+            target_pages = 1
+
+        def count_pages(path: str) -> int:
+            if PdfReader is None:
+                # If we can't count pages, just export once (no fit loop).
+                return 999
+            try:
+                reader = PdfReader(path)
+                return len(reader.pages)
+            except Exception:
+                return 999
+
+        # Fit attempts (CSS knobs)
+        style_steps = [
+            # baseline
+            {},
+            {'font_size_pt': 9.3, 'line_height': 1.32, 'padding_cm': 0.95, 'section_gap_px': 7},
+            {'font_size_pt': 9.1, 'line_height': 1.28, 'padding_cm': 0.9, 'section_gap_px': 6},
+            {'font_size_pt': 8.9, 'line_height': 1.24, 'padding_cm': 0.85, 'section_gap_px': 5},
+            {'font_size_pt': 8.7, 'line_height': 1.20, 'padding_cm': 0.8, 'section_gap_px': 4},
+        ]
+
+        # Content trim steps (only applied after CSS steps fail)
+        trim_steps = [
+            None,
+            {'max_experiences': 3, 'max_bullets': 4},
+            {'max_experiences': 2, 'max_bullets': 3},
+            {'max_experiences': 2, 'max_bullets': 2},
+        ]
+
+        def apply_trim(data: dict, trim):
+            if not trim:
+                return data
+            d = copy.deepcopy(data)
+            max_exps = trim.get('max_experiences')
+            max_bullets = trim.get('max_bullets')
+            if isinstance(d.get('experience'), list) and max_exps:
+                d['experience'] = [e for e in d['experience'] if isinstance(e, dict)][:max_exps]
+                if max_bullets:
+                    for e in d['experience']:
+                        if isinstance(e.get('highlights'), list):
+                            e['highlights'] = [h for h in e['highlights'] if h][:max_bullets]
+            if isinstance(d.get('projects'), list) and max_bullets:
+                # Also trim project bullets a bit
+                for p in d['projects']:
+                    if isinstance(p, dict) and isinstance(p.get('highlights'), list):
+                        p['highlights'] = [h for h in p['highlights'] if h][:max_bullets]
+            return d
+
+        # Render + fit loop
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page()
+
+                best_pdf = None
+                best_pages = 999
+                best_meta = {"pages": 999, "trimmed": False, "style": {}, "trim": None}
+
+                for trim in trim_steps:
+                    for style in style_steps:
+                        data_override = apply_trim(self.resume_data, trim)
+                        html = self.generate_html(template=template, style=style, data=data_override)
+
+                        with tempfile.TemporaryDirectory() as td:
+                            html_path = os.path.join(td, 'resume.html')
+                            pdf_path = os.path.join(td, 'resume.pdf')
+                            with open(html_path, 'w', encoding='utf-8') as f:
+                                f.write(html)
+
+                            page.goto(f"file://{os.path.abspath(html_path)}")
+                            page.pdf(path=pdf_path, format='A4', print_background=True)
+
+                            pages = count_pages(pdf_path)
+                            trimmed = bool(trim)
+
+                            if pages < best_pages:
+                                best_pages = pages
+                                with open(pdf_path, 'rb') as rf:
+                                    best_pdf = rf.read()
+                                best_meta = {"pages": pages, "trimmed": trimmed, "style": style, "trim": trim}
+
+                            if pages <= target_pages:
+                                with open(filename, 'wb') as out:
+                                    out.write(best_pdf)
+                                return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, **best_meta}}
+
+                # If we never reached target, still output best attempt.
+                if best_pdf is not None:
+                    with open(filename, 'wb') as out:
+                        out.write(best_pdf)
+                    return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, **best_meta}}
+
+                # Fallback (shouldn't happen)
+                html_file = self.export_html("temp_resume.html")
+                page.goto(f"file://{os.path.abspath(html_file)}")
+                page.pdf(path=filename, format="A4", print_background=True)
+                os.remove(html_file)
+                return {"filename": filename, "meta": {"target_pages": target_pages, "template": template, "pages": 999, "trimmed": False, "style": {}, "trim": None}}
+            finally:
+                browser.close()
 
 
 def main():

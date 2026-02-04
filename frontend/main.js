@@ -5,6 +5,8 @@ const path = require('path');
 let mainWindow;
 let pythonProcess;
 
+const isDev = process.argv.includes('--dev');
+
 // 启动Python后端服务
 function startPythonBackend() {
     const rootDir = path.join(__dirname, '..');
@@ -12,7 +14,7 @@ function startPythonBackend() {
     pythonProcess = spawn('python3', [backendPath], { cwd: rootDir });
     
     pythonProcess.stdout.on('data', (data) => {
-        console.log(`Backend: ${data}`);
+        if (isDev) console.log(`Backend: ${data}`);
     });
     
     pythonProcess.stderr.on('data', (data) => {

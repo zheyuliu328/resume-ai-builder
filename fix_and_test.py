@@ -3,10 +3,7 @@
 快速诊断和测试脚本
 """
 import os
-import sys
-import json
 import requests
-import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,7 +20,7 @@ def test_api_connection():
         print("❌ 未设置 CLAUDE_API_KEY")
         return False
     
-    print(f"📝 配置信息:")
+    print("📝 配置信息:")
     print(f"   Base URL: {base_url}")
     print(f"   Model: {model}")
     print(f"   API Key: {api_key[:10]}...{api_key[-4:]}")
@@ -38,7 +35,7 @@ def test_api_connection():
         client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
         
         print("🤖 发送测试请求...")
-        message = client.messages.create(
+        client.messages.create(
             model=model,
             max_tokens=10,
             messages=[{"role": "user", "content": "test"}]
@@ -64,7 +61,7 @@ def test_api_connection():
             print("   2. 尝试使用官方API: https://api.anthropic.com")
             print("   3. 如果使用中转服务，可能服务不稳定")
         else:
-            print(f"\n💡 建议: 检查配置或尝试官方API")
+            print("\n💡 建议: 检查配置或尝试官方API")
         
         return False
 

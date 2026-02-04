@@ -19,7 +19,7 @@ def test_api():
     base_url = "https://www.ai678.top"  # 不带/v1，代码会自动添加
     model = "claude-sonnet-4-5-20250929"
     
-    print(f"\n📝 配置信息:")
+    print("\n📝 配置信息:")
     print(f"   Base URL: {base_url}")
     print(f"   Model: {model}")
     print(f"   API Key: {api_key[:15]}...{api_key[-4:]}")
@@ -56,7 +56,7 @@ def test_api():
         error_str = str(e)
         if '401' in error_str:
             print("\n💡 API Key无效，请检查:")
-            print(f"   1. 访问 https://www.ai678.top/sk.html 查询余额")
+            print("   1. 访问 https://www.ai678.top/sk.html 查询余额")
             print("   2. 确认API Key是否正确")
         elif '403' in error_str:
             print("\n💡 无权访问，可能原因:")
@@ -67,7 +67,7 @@ def test_api():
             print("   1. 网络连接问题")
             print("   2. 服务器响应慢")
         else:
-            print(f"\n💡 其他错误，请检查配置")
+            print("\n💡 其他错误，请检查配置")
         
         return False
 
