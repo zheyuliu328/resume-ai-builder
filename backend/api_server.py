@@ -3,6 +3,7 @@
 Flask API服务 - 为Electron前端提供RESTful接口
 """
 from flask import Flask, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
 from flask_cors import CORS
 import sys
 import os
@@ -25,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 sys.path.append(str(ROOT_DIR))
 from app import ResumeBuilder
+
+# Local utilities
+sys.path.append(str(ROOT_DIR / 'tools'))
+from pdf_to_resume_json import extract_text, to_json  # type: ignore
 
 
 def handle_errors(f):
@@ -266,6 +271,46 @@ def export_pdf():
     if filename:
         return jsonify({'success': True, 'filename': filename})
     return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
+
+
+@app.route('/api/import/pdf', methods=['POST'])
+@handle_errors
+def import_pdf():
+    """Import a resume PDF (text-based) and convert to the project JSON schema.
+
+    Phase 1 goal: get *usable structured data* into resume_data.json-like shape.
+    OCR/scanned PDFs are out-of-scope for now.
+
+    Request: multipart/form-data with field name `file`.
+    Response: { success: true, data: <resume_json>, meta: { pages, chars } }
+    """
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'missing_file'}), 400
+
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'success': False, 'error': 'empty_filename'}), 400
+
+    filename = secure_filename(f.filename)
+    if not filename.lower().endswith('.pdf'):
+        return jsonify({'success': False, 'error': 'not_pdf'}), 400
+
+    raw = f.read()
+    if not raw:
+        return jsonify({'success': False, 'error': 'empty_file'}), 400
+
+    # Write to a temp file in project root
+    tmp_dir = ROOT_DIR / '.tmp'
+    tmp_dir.mkdir(exist_ok=True)
+    tmp_path = tmp_dir / filename
+    tmp_path.write_bytes(raw)
+
+    text = extract_text(tmp_path)
+    if not text.strip():
+        return jsonify({'success': False, 'error': 'no_extractable_text', 'hint': 'Scanned PDFs need OCR (not supported yet).'}), 400
+
+    data = to_json(text)
+    return jsonify({'success': True, 'data': data, 'meta': {'chars': len(text)}})
 
 
 @app.route('/health', methods=['GET'])
