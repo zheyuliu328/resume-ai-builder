@@ -281,6 +281,86 @@ async function createVariant() {
     }
 }
 
+function openJDVariantModal() {
+    const modal = document.getElementById('jd-variant-modal');
+    const hint = document.getElementById('jd-variant-hint');
+    if (hint) hint.style.display = 'none';
+    if (modal) modal.style.display = 'flex';
+
+    const ta = document.getElementById('jd-variant-text');
+    if (ta) ta.focus();
+}
+
+function closeJDVariantModal() {
+    const modal = document.getElementById('jd-variant-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function analyzeJDAndCreateVariant() {
+    if (!isConfigHealthy) {
+        showNotification('请先完成 API 配置并测试连接', 'error');
+        switchView('config');
+        return;
+    }
+
+    const ta = document.getElementById('jd-variant-text');
+    const jd = (ta ? ta.value : '').trim();
+    if (!jd) {
+        showNotification('请粘贴 JD 文本', 'error');
+        return;
+    }
+
+    const hint = document.getElementById('jd-variant-hint');
+    if (hint) {
+        hint.style.display = 'inline';
+        hint.textContent = 'Analyzing…';
+    }
+
+    try {
+        // Step 2: parse JD to metadata
+        const parsed = await apiCall('/api/jd/parse', {
+            method: 'POST',
+            body: JSON.stringify({ jd }),
+            timeoutMs: 60000,
+        });
+
+        const meta = parsed && parsed.data ? parsed.data : null;
+        const slug = meta && meta.slug ? String(meta.slug).trim() : '';
+        if (!slug) throw new Error('JD 解析未返回 slug');
+
+        if (hint) hint.textContent = `Creating ${slug}…`;
+
+        // Step 2: create variant from master using slug
+        const created = await apiCall('/api/variants/create', {
+            method: 'POST',
+            body: JSON.stringify({ name: slug, source: 'master' }),
+            timeoutMs: 15000,
+        });
+
+        if (created && created.success) {
+            activeVariantName = created.name || slug;
+            currentResumeData = created.data;
+            setDirty(false);
+            await initVariants({ silent: true });
+
+            const el = document.getElementById('resume-data');
+            if (el) el.innerHTML = `<pre>${JSON.stringify(currentResumeData, null, 2)}</pre>`;
+
+            closeJDVariantModal();
+            showNotification(`已创建并切换到: ${activeVariantName}`);
+
+            // Optional: dump meta into JD result panel if present
+            const out = document.getElementById('jd-result');
+            if (out) out.textContent = JSON.stringify(meta, null, 2);
+        }
+    } catch (e) {
+        showNotification('JD 创建 variant 失败：' + e.message, 'error');
+        if (hint) hint.textContent = 'Failed. Check config/logs.';
+    } finally {
+        if (hint) setTimeout(() => (hint.style.display = 'none'), 3000);
+    }
+}
+
 // 切换视图
 function switchView(viewName, evt) {
     // 更新导航激活状态

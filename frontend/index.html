@@ -270,6 +270,7 @@
                         <option value="master">master</option>
                     </select>
                     <button class="btn btn-secondary" onclick="createVariant()">New</button>
+                    <button class="btn btn-secondary" onclick="openJDVariantModal()">Analyze JD</button>
                     <button class="btn btn-secondary" onclick="saveVariant()">Save</button>
 
                     <span style="width:1px;height:22px;background:var(--border);display:inline-block;"></span>
@@ -420,6 +421,26 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JD -> Variant Modal (MVP) -->
+    <div id="jd-variant-modal" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;padding:24px;">
+        <div style="width:min(860px, 96vw);max-height:86vh;overflow:auto;background:var(--panel-solid);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
+                <div>
+                    <div style="font-weight:650;">Analyze JD → Create Variant</div>
+                    <div class="muted" style="font-size:12px;margin-top:4px;">粘贴 JD 文本，我会解析 company/role/slug，然后自动创建 target variant（从 master 克隆）。</div>
+                </div>
+                <button class="btn btn-secondary" onclick="closeJDVariantModal()">Close</button>
+            </div>
+
+            <textarea id="jd-variant-text" placeholder="Paste Job Description here…" style="width:100%;min-height:260px;resize:vertical;padding:12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);line-height:1.5;"></textarea>
+
+            <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap;">
+                <span id="jd-variant-hint" class="muted" style="font-size:12px;display:none;"></span>
+                <button class="btn btn-primary" onclick="analyzeJDAndCreateVariant()">Go</button>
             </div>
         </div>
     </div>
