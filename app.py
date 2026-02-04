@@ -38,8 +38,13 @@ class ResumeBuilder:
         with open(self.data_file, 'w', encoding='utf-8') as f:
             json.dump(self.resume_data, f, ensure_ascii=False, indent=2)
     
-    def update_section(self, section: str, content: str):
-        """使用AI优化并更新简历部分"""
+    def update_section(self, section: str, content: str, *, apply: bool = True):
+        """使用AI优化并更新简历部分。
+
+        Safety-by-design:
+        - When apply=False: only return a suggested update (no disk writes).
+        - When apply=True: persist to resume_data.json (legacy behavior).
+        """
         prompt = f"""请根据以下新信息，优化并更新简历的{section}部分。
         
 现有内容：
@@ -49,26 +54,31 @@ class ResumeBuilder:
 {content}
 
 请返回JSON格式的更新内容，保持专业、简洁、突出成果。"""
-        
+
         message = self.client.messages.create(
             model=self.model,
             max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
         )
-        
+
         # 提取AI返回的内容
         response_text = message.content[0].text
+
         # 尝试解析JSON
         try:
             import re
-            json_match = re.search(r'\{.*\}|\[.*\]', response_text, re.DOTALL)
+
+            json_match = re.search(r"\{.*\}|\[.*\]", response_text, re.DOTALL)
             if json_match:
                 updated_content = json.loads(json_match.group())
                 self.resume_data[section] = updated_content
-                self._save_resume()
+                if apply:
+                    self._save_resume()
                 return updated_content
-        except:
+        except Exception:
+            # Fall through to raw text.
             pass
+
         return response_text
     
     def _safe_render_list(self, items, render_func):

@@ -257,10 +257,43 @@ def save_resume():
 @app.route('/api/update', methods=['POST'])
 @handle_errors
 def update_section():
-    data = request.json
+    """Preview-first mutation endpoint.
+
+    Request JSON:
+      { section: str, content: str, resume_data?: dict, apply?: bool }
+
+    Semantics:
+      - apply=false (default): return suggested resume_data WITHOUT persisting.
+      - apply=true: persist (explicit) and return updated resume_data.
+    """
+    data = request.json or {}
+    section = data.get('section')
+    content = data.get('content')
+    apply_flag = bool(data.get('apply', False))
+
+    if not section or content is None:
+        return jsonify({'success': False, 'error': 'bad_request'}), 400
+
     builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
-    result = builder.update_section(data['section'], data['content'])
-    return jsonify({'success': True, 'data': result, 'resume_data': builder.resume_data})
+
+    # Prefer caller-provided baseline so preview reflects current UI state.
+    if isinstance(data.get('resume_data'), dict):
+        builder.resume_data = data['resume_data']
+
+    result = builder.update_section(section, content, apply=apply_flag)
+
+    # Persist to active variant store only when explicitly applied.
+    if apply_flag:
+        try:
+            active = read_active_variant(DATA_DIR) or 'master'
+            if active == 'master':
+                save_json(MASTER_PATH, builder.resume_data)
+            else:
+                save_json(get_variant_path(DATA_DIR, active), builder.resume_data)
+        except Exception as e:
+            logger.warning(f"variant save skipped: {e}")
+
+    return jsonify({'success': True, 'data': result, 'resume_data': builder.resume_data, 'applied': apply_flag})
 
 
 @app.route('/api/translate', methods=['POST'])

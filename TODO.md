@@ -56,7 +56,7 @@ This repo follows **Local-first + Safety-by-design** (see `VISION.md`).
 
 > Constraints honored: local-first, minimalism, safety-by-design, and verifiable outcomes.
 
-- [ ] Task 1: Enforce Preview → Apply/Save semantics for mutation paths (start with `/api/update`).
+- [x] Task 1: Enforce Preview → Apply/Save semantics for mutation paths (start with `/api/update`).
   - Add an explicit `apply` flag (default `false`) so the API can return a **suggested** `resume_data` without persisting.
   - Provide an explicit Apply/Save action (endpoint or flag) that is the **only** persistence path.
   - Frontend: align labels with the mental model (“Preview suggestion” vs “Apply/Save”).
