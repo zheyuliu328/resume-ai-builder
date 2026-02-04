@@ -445,13 +445,18 @@ def export_html():
 @app.route('/api/export/pdf', methods=['POST'])
 @handle_errors
 def export_pdf():
-    data = request.json
+    data = request.json or {}
     builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
     if 'resume_data' in data:
         builder.resume_data = data['resume_data']
-    filename = builder.export_pdf(data.get('filename', 'resume.pdf'))
+
+    filename = data.get('filename', 'resume.pdf')
+    target_pages = data.get('target_pages', 1)
+    template = data.get('template', 'modern')
+
+    filename = builder.export_pdf(filename, target_pages=target_pages, template=template)
     if filename:
-        return jsonify({'success': True, 'filename': filename})
+        return jsonify({'success': True, 'filename': filename, 'target_pages': int(target_pages) if target_pages else 1, 'template': template})
     return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
 
 
