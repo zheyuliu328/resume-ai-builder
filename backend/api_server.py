@@ -4,6 +4,19 @@ Flask API服务 - 为Electron前端提供RESTful接口
 """
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
+
+# variants_store is a local helper (imported via sys.path below)
+from variants_store import (
+    ensure_dirs,
+    list_variants,
+    load_json,
+    save_json,
+    get_master_path,
+    get_variant_path,
+    read_active_variant,
+    write_active_variant,
+)
+
 from flask_cors import CORS
 import sys
 import os
@@ -12,6 +25,7 @@ import logging
 from functools import wraps
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Any, Dict
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 load_dotenv(ROOT_DIR / '.env')
@@ -30,6 +44,11 @@ from app import ResumeBuilder
 # Local utilities
 sys.path.append(str(ROOT_DIR / 'tools'))
 from pdf_to_resume_json import extract_text, to_json  # type: ignore
+
+# Local data store (variants)
+DATA_DIR = ROOT_DIR / 'data'
+ensure_dirs(DATA_DIR)
+MASTER_PATH = get_master_path(DATA_DIR)
 
 
 def handle_errors(f):
@@ -90,27 +109,40 @@ FALLBACK_MODELS = [
 
 
 def call_ai_with_fallback(builder, prompt, max_tokens=4096):
-    """
-    带降级策略的AI调用
-    如果主模型失败，自动尝试备用模型
+    """Call AI with a fallback model list.
+
+    Returns the provider response object.
     """
     models_to_try = [builder.model] + [m for m in FALLBACK_MODELS if m != builder.model]
-    
+
     for model in models_to_try:
         try:
-            logger.info(f"🤖 尝试使用模型: {model}")
+            logger.info(f"🤖 Trying model: {model}")
             message = builder.client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
-            logger.info(f"✅ 模型 {model} 调用成功")
+            logger.info(f"✅ Model {model} success")
             return message
         except Exception as e:
-            logger.warning(f"⚠️ 模型 {model} 失败: {str(e)}")
+            logger.warning(f"⚠️ Model {model} failed: {str(e)}")
             if model == models_to_try[-1]:
-                raise Exception(f"所有模型均失败。最后错误: {str(e)}")
+                raise Exception(f"All models failed. Last error: {str(e)}")
             continue
+
+
+def extract_json_from_text(text: str) -> Any:
+    """Best-effort JSON extraction from a model response text."""
+    import json as _json
+    import re as _re
+
+    m = _re.search(r"\{.*\}", text, _re.DOTALL)
+    if not m:
+        m = _re.search(r"\[.*\]", text, _re.DOTALL)
+    if not m:
+        raise ValueError("no_json_found")
+    return _json.loads(m.group(0))
 
 
 @app.route('/api/config', methods=['POST'])
@@ -208,6 +240,17 @@ def save_resume():
     builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
     builder.resume_data = data['resume_data']
     builder._save_resume()
+
+    # Also persist to active variant store (optional, local)
+    try:
+        active = read_active_variant(DATA_DIR) or 'master'
+        if active == 'master':
+            save_json(MASTER_PATH, builder.resume_data)
+        else:
+            save_json(get_variant_path(DATA_DIR, active), builder.resume_data)
+    except Exception as e:
+        logger.warning(f"variant save skipped: {e}")
+
     return jsonify({'success': True, 'message': '简历已保存'})
 
 
@@ -223,19 +266,96 @@ def update_section():
 @app.route('/api/translate', methods=['POST'])
 @handle_errors
 def translate_resume():
-    import re
     data = request.json
     builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
     target_lang = data['target_lang']
     lang_map = {'zh-CN': '简体中文', 'zh-TW': '繁体中文', 'en-US': '英语'}
     prompt = f"将以下简历翻译成{lang_map.get(target_lang, target_lang)}，返回JSON：\n{json.dumps(builder.resume_data, ensure_ascii=False)}"
-    
-    # 使用带容错的AI调用
-    message = call_ai_with_fallback(builder, prompt, max_tokens=4096)
-    json_match = re.search(r'\{.*\}', message.content[0].text, re.DOTALL)
-    if json_match:
-        return jsonify({'success': True, 'data': json.loads(json_match.group())})
-    return jsonify({'success': False, 'error': '翻译失败'}), 500
+
+    message = call_ai_with_fallback(builder, prompt, max_tokens=2048)
+    parsed = extract_json_from_text(message.content[0].text)
+    return jsonify({'success': True, 'data': parsed})
+
+
+@app.route('/api/chat/refine', methods=['POST'])
+@handle_errors
+def chat_refine():
+    """Refine resume content with AI based on a user instruction.
+
+    Request JSON:
+      { instruction: str, resume_data: dict, scope?: str }
+
+    Response:
+      { success: true, data: <updated_resume_data>, summary: str }
+
+    This endpoint is designed for the in-app chat sidebar.
+    """
+    payload: Dict[str, Any] = request.json or {}
+    instruction = (payload.get('instruction') or '').strip()
+    resume_data = payload.get('resume_data')
+    scope = (payload.get('scope') or 'resume').strip()
+
+    if not instruction:
+        return jsonify({'success': False, 'error': 'missing_instruction'}), 400
+    if not isinstance(resume_data, dict):
+        return jsonify({'success': False, 'error': 'missing_resume_data'}), 400
+
+    builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
+
+    # Keep prompt bounded to reduce cost
+    resume_blob = json.dumps(resume_data, ensure_ascii=False)
+    prompt = (
+        "You are an expert resume editor.\n"
+        "Task: apply the user's instruction to the given resume JSON.\n"
+        "Rules: keep JSON schema consistent; do not add new top-level keys; keep bullet points concise; preserve existing factual content unless asked to rewrite.\n"
+        f"Scope: {scope}\n"
+        f"Instruction: {instruction}\n\n"
+        f"Resume JSON:\n{resume_blob}\n\n"
+        "Return ONLY valid JSON with keys: {\"summary\": string, \"resume_data\": object}."
+    )
+
+    message = call_ai_with_fallback(builder, prompt, max_tokens=900)
+    parsed = extract_json_from_text(message.content[0].text)
+    updated = parsed.get('resume_data') if isinstance(parsed, dict) else None
+    summary = parsed.get('summary') if isinstance(parsed, dict) else None
+
+    if not isinstance(updated, dict):
+        return jsonify({'success': False, 'error': 'ai_return_invalid'}), 500
+
+    return jsonify({'success': True, 'data': updated, 'summary': summary or ''})
+
+
+@app.route('/api/jd/analyze', methods=['POST'])
+@handle_errors
+def jd_analyze():
+    """Analyze a JD against current resume and return gaps + suggestions."""
+    payload: Dict[str, Any] = request.json or {}
+    jd = (payload.get('jd') or '').strip()
+    resume_data = payload.get('resume_data')
+
+    if not jd:
+        return jsonify({'success': False, 'error': 'missing_jd'}), 400
+    if not isinstance(resume_data, dict):
+        return jsonify({'success': False, 'error': 'missing_resume_data'}), 400
+
+    builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
+    prompt = (
+        "You are a recruiter + resume coach.\n"
+        "Given a job description and a resume JSON, output:\n"
+        "1) match_score (0-100)\n"
+        "2) top_keywords (list)\n"
+        "3) gaps (list of actionable missing items)\n"
+        "4) suggestions (list of edits to improve alignment)\n"
+        "Return ONLY JSON with keys: match_score, top_keywords, gaps, suggestions.\n\n"
+        f"Job Description:\n{jd}\n\n"
+        f"Resume JSON:\n{json.dumps(resume_data, ensure_ascii=False)}"
+    )
+
+    message = call_ai_with_fallback(builder, prompt, max_tokens=800)
+    parsed = extract_json_from_text(message.content[0].text)
+    if not isinstance(parsed, dict):
+        return jsonify({'success': False, 'error': 'ai_return_invalid'}), 500
+    return jsonify({'success': True, 'data': parsed})
 
 
 @app.route('/api/export/html', methods=['POST'])
@@ -273,16 +393,96 @@ def export_pdf():
     return jsonify({'success': False, 'error': 'PDF导出失败'}), 500
 
 
+@app.route('/api/variants', methods=['GET'])
+@handle_errors
+def variants_list():
+    variants = list_variants(DATA_DIR)
+    active = read_active_variant(DATA_DIR) or 'master'
+    return jsonify({'success': True, 'variants': ['master'] + variants, 'active': active})
+
+
+@app.route('/api/variants/select', methods=['POST'])
+@handle_errors
+def variants_select():
+    payload = request.json or {}
+    name = payload.get('name')
+    if not name:
+        return jsonify({'success': False, 'error': 'missing_name'}), 400
+
+    if name == 'master':
+        if not MASTER_PATH.exists():
+            return jsonify({'success': False, 'error': 'master_missing'}), 404
+        write_active_variant(DATA_DIR, 'master')
+        return jsonify({'success': True, 'name': 'master', 'data': load_json(MASTER_PATH)})
+
+    path = get_variant_path(DATA_DIR, name)
+    if not path.exists():
+        return jsonify({'success': False, 'error': 'variant_missing'}), 404
+
+    write_active_variant(DATA_DIR, name)
+    return jsonify({'success': True, 'name': name, 'data': load_json(path)})
+
+
+@app.route('/api/variants/save', methods=['POST'])
+@handle_errors
+def variants_save():
+    payload = request.json or {}
+    name = payload.get('name')
+    data = payload.get('data')
+    if not name or not isinstance(data, dict):
+        return jsonify({'success': False, 'error': 'bad_request'}), 400
+
+    if name == 'master':
+        save_json(MASTER_PATH, data)
+        write_active_variant(DATA_DIR, 'master')
+        return jsonify({'success': True, 'name': 'master'})
+
+    path = get_variant_path(DATA_DIR, name)
+    save_json(path, data)
+    write_active_variant(DATA_DIR, name)
+    return jsonify({'success': True, 'name': name})
+
+
+@app.route('/api/variants/create', methods=['POST'])
+@handle_errors
+def variants_create():
+    payload = request.json or {}
+    name = payload.get('name')
+    source = payload.get('source', 'master')
+
+    if not name:
+        return jsonify({'success': False, 'error': 'missing_name'}), 400
+
+    if source == 'master':
+        if MASTER_PATH.exists():
+            data = load_json(MASTER_PATH)
+        else:
+            # fallback to in-memory resume_data.json behavior
+            data = ResumeBuilder(config['api_key'], config['base_url'], config['model']).resume_data
+    else:
+        data = payload.get('data')
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'missing_data'}), 400
+
+    path = get_variant_path(DATA_DIR, name)
+    if path.exists():
+        return jsonify({'success': False, 'error': 'variant_exists'}), 409
+
+    save_json(path, data)
+    write_active_variant(DATA_DIR, name)
+    return jsonify({'success': True, 'name': name, 'data': data})
+
+
 @app.route('/api/import/pdf', methods=['POST'])
 @handle_errors
 def import_pdf():
-    """Import a resume PDF (text-based) and convert to the project JSON schema.
+    """Import a resume PDF (text-based) and convert to JSON.
 
-    Phase 1 goal: get *usable structured data* into resume_data.json-like shape.
-    OCR/scanned PDFs are out-of-scope for now.
+    Phase 1 goal: get *usable structured data* into resume_data.json-like schema,
+    store it as master.json, and set it as the active variant.
 
     Request: multipart/form-data with field name `file`.
-    Response: { success: true, data: <resume_json>, meta: { pages, chars } }
+    Response: { success: true, data: <resume_json>, meta: { chars }, stored: { master: true } }
     """
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'missing_file'}), 400
@@ -299,7 +499,6 @@ def import_pdf():
     if not raw:
         return jsonify({'success': False, 'error': 'empty_file'}), 400
 
-    # Write to a temp file in project root
     tmp_dir = ROOT_DIR / '.tmp'
     tmp_dir.mkdir(exist_ok=True)
     tmp_path = tmp_dir / filename
@@ -310,7 +509,12 @@ def import_pdf():
         return jsonify({'success': False, 'error': 'no_extractable_text', 'hint': 'Scanned PDFs need OCR (not supported yet).'}), 400
 
     data = to_json(text)
-    return jsonify({'success': True, 'data': data, 'meta': {'chars': len(text)}})
+
+    # Persist as master
+    save_json(MASTER_PATH, data)
+    write_active_variant(DATA_DIR, 'master')
+
+    return jsonify({'success': True, 'data': data, 'meta': {'chars': len(text)}, 'stored': {'master': True}})
 
 
 @app.route('/health', methods=['GET'])

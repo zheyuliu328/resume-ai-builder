@@ -239,6 +239,10 @@
                     <span class="nav-icon">📥</span>
                     <span>导入PDF</span>
                 </div>
+                <div class="nav-item" onclick="switchView('chat')">
+                    <span class="nav-icon">💬</span>
+                    <span>Chat / JD</span>
+                </div>
                 <div class="nav-item" id="nav-export" onclick="exportPDF()">
                     <span class="nav-icon">📄</span>
                     <span>导出PDF</span>
@@ -365,6 +369,38 @@
                     </div>
                 </div>
 
+                <!-- Chat 视图 -->
+                <div id="chat-view" class="view">
+                    <div class="card" style="max-width: 980px; margin: 0 auto; padding: 18px;">
+                        <h3 style="margin-bottom: 10px;">💬 Chat / JD Targeting</h3>
+                        <p class="muted" style="margin-bottom: 14px;">用自然语言指令优化简历某部分；或粘贴 JD 做匹配度与缺口分析。输出会先预览，点 Apply 才会写入当前简历。</p>
+
+                        <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 14px;">
+                            <div>
+                                <label class="muted" style="display:block;margin-bottom:6px;">Chat 指令</label>
+                                <textarea id="chat-instruction" style="width:100%;min-height:140px;" placeholder="例如：把 experience 里最近一段经历精简 20%，突出量化结果；或把项目描述改得更偏 Data Analyst JD。"></textarea>
+                                <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
+                                    <button class="btn btn-primary" onclick="chatRefine()">生成改动建议</button>
+                                    <button class="btn" onclick="applyChatSuggestion()">Apply</button>
+                                </div>
+                                <div id="chat-summary" class="muted" style="margin-top:10px;"></div>
+                            </div>
+                            <div>
+                                <label class="muted" style="display:block;margin-bottom:6px;">Paste JD</label>
+                                <textarea id="jd-text" style="width:100%;min-height:140px;" placeholder="粘贴职位描述（JD）到这里，然后分析匹配度与缺口。"></textarea>
+                                <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
+                                    <button class="btn btn-primary" onclick="analyzeJD()">分析 JD 匹配度</button>
+                                </div>
+                                <pre id="jd-result" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;color:var(--muted);"></pre>
+                            </div>
+                        </div>
+
+                        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+                        <label class="muted" style="display:block;margin-bottom:6px;">Preview (pending changes)</label>
+                        <pre id="chat-preview" style="white-space:pre-wrap;word-break:break-word;max-height: 360px;overflow:auto;color:var(--text);background: rgba(0,0,0,0.20);border:1px solid var(--border);padding:12px;border-radius:12px;"></pre>
+                    </div>
+                </div>
+
                 <!-- 预览视图 -->
                 <div id="preview-view" class="view">
                     <div class="preview-container card" id="preview-content">
@@ -383,5 +419,6 @@
 
     <script src="app.js"></script>
     <script src="import.js"></script>
+    <script src="chat.js"></script>
 </body>
 </html>

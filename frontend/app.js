@@ -166,6 +166,7 @@ function switchView(viewName, evt) {
         'config': 'API配置',
         'import': '导入PDF',
         'edit': '编辑简历',
+        'chat': 'Chat / JD',
         'preview': '预览'
     };
     document.getElementById('view-title').textContent = titles[viewName] || 'AI简历助手';

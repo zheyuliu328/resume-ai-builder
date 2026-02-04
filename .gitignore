@@ -35,3 +35,7 @@ app.log
 
 # Local backups
 .backups/
+
+# Local app data
+.tmp/
+data/
