@@ -194,7 +194,7 @@ def test_connection():
     try:
         builder = ResumeBuilder(test_config['api_key'], base_url, test_config['model'])
         # 发送最小测试请求
-        message = builder.client.messages.create(
+        builder.client.messages.create(
             model=test_config['model'],
             max_tokens=10,
             messages=[{"role": "user", "content": "test"}]

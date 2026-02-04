@@ -6,7 +6,7 @@
 - [x] Task 1: Global cleanup — remove noisy debug logs (console.log / print) and dead code.
   - VERIFY: run `python3 -m py_compile backend/api_server.py app.py` and `node -c frontend/app.js frontend/chat.js frontend/import.js`
 
-- [ ] Task 2: Add basic lint discipline (lightweight).
+- [x] Task 2: Add basic lint discipline (lightweight).
   - Python: add ruff (or pylint if already preferred) config; fix high-severity issues.
   - JS: add eslint config if missing; fix high-severity issues.
   - VERIFY: run lint commands and ensure no "error"-level findings.

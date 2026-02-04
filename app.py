@@ -5,7 +5,6 @@ AI简历更新助手
 """
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 import anthropic
 
