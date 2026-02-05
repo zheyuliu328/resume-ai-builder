@@ -220,7 +220,15 @@ FALLBACK_MODELS = [
 
 本仓库包含一个“手动门控”的发布工作流（不会自动合并 PR）。
 
-### 1) 通过 merge commit 触发发布（推荐）
+### 1) 手动 workflow_dispatch 发布（推荐）
+
+在 GitHub Actions 页面手动运行 `Release` workflow，并填写：
+- `version`: `X.Y.Z`
+- `notes_source`: `auto` / `release_notes` / `roadmap`
+
+> 建议在仓库 Settings 中为 workflow 绑定 `release` 环境并开启 required reviewers（可选），进一步强化人工门控。
+
+### 2) 通过 merge commit 触发发布（可选）
 
 当 `main` 分支收到一次 push，并且 **该 commit message 包含**：`Release vX.Y.Z`（例如：`Release v1.1.0`），工作流会执行：
 
@@ -250,12 +258,6 @@ docker run --rm -p 5001:5001 resume-ai-builder:local
 ```
 
 > 人工门控：只有显式包含 `Release v...` 的 commit 或手动触发才会发布。
-
-### 2) 手动 workflow_dispatch 发布
-
-在 GitHub Actions 页面手动运行 `Release` workflow，并填写：
-- `version`: `X.Y.Z`
-- `notes_source`: `auto` / `release_notes` / `roadmap`
 
 ### 3) 创建下一轮 planning 分支（手动）
 
