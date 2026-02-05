@@ -610,6 +610,96 @@ def export_pdf_download():
     return send_file(str(path), as_attachment=True, download_name=filename, mimetype='application/pdf')
 
 
+@app.route('/api/portfolio/generate', methods=['POST'])
+@handle_errors
+def portfolio_generate():
+    payload: Dict[str, Any] = request.json or {}
+    slug = (payload.get('slug') or 'portfolio').strip()
+    include_contact = bool(payload.get('include_contact', False))
+
+    # load current active resume data
+    builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
+    resume_data = builder.resume_data
+
+    from tools.portfolio_site import slugify, generate_site
+
+    safe_slug = slugify(slug)
+    out_dir = (DATA_DIR / 'portfolio_sites' / safe_slug)
+    generate_site(resume_data, slug=safe_slug, out_dir=out_dir, include_contact=include_contact)
+
+    return jsonify({'success': True, 'slug': safe_slug, 'out_dir': str(out_dir)})
+
+
+@app.route('/api/diplomat/generate', methods=['POST'])
+@handle_errors
+def diplomat_generate():
+    payload: Dict[str, Any] = request.json or {}
+    jd = (payload.get('jd') or '').strip()
+    apply = bool(payload.get('apply', False))
+    slug = (payload.get('slug') or 'bundle').strip() or 'bundle'
+
+    builder = ResumeBuilder(config['api_key'], config['base_url'], config['model'])
+    resume_data = builder.resume_data
+
+    from tools.diplomat import generate_offline, save_bundle
+
+    cover, email, meta = generate_offline(resume_data, jd)
+    meta.update({'slug': slug, 'apply': apply})
+
+    out_dir = (DATA_DIR / 'diplomat' / slug)
+    if apply:
+        save_bundle(out_dir, cover, email, meta)
+
+    return jsonify({'success': True, 'cover_letter': cover, 'cold_email': email, 'meta': meta, 'out_dir': str(out_dir) if apply else None})
+
+
+@app.route('/api/jd/capture', methods=['POST'])
+@handle_errors
+def jd_capture():
+    payload: Dict[str, Any] = request.json or {}
+    from tools.jd_capture import save_capture
+
+    path = save_capture(DATA_DIR / 'jd_captures', payload)
+    return jsonify({'success': True, 'path': str(path)})
+
+
+@app.route('/api/interview/start', methods=['POST'])
+@handle_errors
+def interview_start():
+    payload: Dict[str, Any] = request.json or {}
+    target = (payload.get('target') or 'general').strip() or 'general'
+    from tools.mock_interviewer import start_session
+
+    s = start_session(DATA_DIR / 'interviews', target=target)
+    return jsonify({'success': True, 'session_id': s.id})
+
+
+@app.route('/api/interview/next', methods=['GET'])
+@handle_errors
+def interview_next():
+    session_id = (request.args.get('session_id') or '').strip()
+    if not session_id:
+        return jsonify({'success': False, 'error': 'missing_session_id'}), 400
+
+    from tools.mock_interviewer import load_session, next_question
+    s = load_session(DATA_DIR / 'interviews', session_id)
+    return jsonify({'success': True, 'question': next_question(s)})
+
+
+@app.route('/api/interview/answer', methods=['POST'])
+@handle_errors
+def interview_answer():
+    payload: Dict[str, Any] = request.json or {}
+    session_id = (payload.get('session_id') or '').strip()
+    ans = (payload.get('answer') or '').strip()
+    if not session_id:
+        return jsonify({'success': False, 'error': 'missing_session_id'}), 400
+
+    from tools.mock_interviewer import answer
+    out = answer(DATA_DIR / 'interviews', session_id, ans)
+    return jsonify({'success': True, **out})
+
+
 @app.route('/api/variants', methods=['GET'])
 @handle_errors
 def variants_list():
