@@ -6,6 +6,8 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
+.venv-lock/
 ENV/
 
 # 简历数据和输出
@@ -36,6 +38,9 @@ Thumbs.db
 # 环境变量和日志
 .env
 app.log
+
+# Local test payloads (may include sensitive data)
+tools/test_fire_payloads.json
 
 # Local backups
 .backups/
