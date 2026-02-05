@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from resume_compiler.domain.schema import Resume
