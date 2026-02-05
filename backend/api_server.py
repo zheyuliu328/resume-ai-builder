@@ -20,6 +20,12 @@ from variants_store import (
     write_active_variant,
 )
 
+# Mission Control (local-first)
+from application_store import create_application, load_application, save_application, set_status
+from gap_engine import gap_analyze
+
+# NOTE: keep imports local-first; no heavy deps.
+
 from flask_cors import CORS
 import sys
 import os
@@ -608,6 +614,149 @@ def export_pdf_download():
         return jsonify({'success': False, 'error': 'file_not_found'}), 404
 
     return send_file(str(path), as_attachment=True, download_name=filename, mimetype='application/pdf')
+
+
+@app.route('/api/applications/create', methods=['POST'])
+@handle_errors
+def applications_create():
+    payload: Dict[str, Any] = request.json or {}
+    capture_id = (payload.get('jd_capture_id') or '').strip()
+    if not capture_id:
+        return jsonify({'success': False, 'error': 'missing_jd_capture_id'}), 400
+
+    # Load capture from disk
+    cap_path = (DATA_DIR / 'jd_captures' / capture_id).resolve() if not capture_id.endswith('.json') else (DATA_DIR / 'jd_captures' / capture_id).resolve()
+    if not str(cap_path).startswith(str((DATA_DIR / 'jd_captures').resolve())):
+        return jsonify({'success': False, 'error': 'bad_capture_id'}), 400
+    if not cap_path.exists():
+        return jsonify({'success': False, 'error': 'capture_not_found'}), 404
+
+    capture = load_json(cap_path)
+    jd_text = str((capture or {}).get('text') or '')
+    title = str((capture or {}).get('title') or '')
+
+    # Create a dedicated variant by cloning master
+    master = get_master_path(DATA_DIR)
+    if master.exists():
+        base = load_json(master)
+    else:
+        base = ResumeBuilder(config['api_key'], config['base_url'], config['model']).resume_data
+
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    variant = (payload.get('variant_name') or f"target_app_{suffix}").strip() or f"target_app_{suffix}"
+
+    # Ensure safe name
+    import re
+    if not re.match(r"^[a-zA-Z0-9._-]+$", variant):
+        return jsonify({'success': False, 'error': 'bad_variant_name'}), 400
+
+    vpath = get_variant_path(DATA_DIR, variant)
+    if vpath.exists():
+        return jsonify({'success': False, 'error': 'variant_exists'}), 409
+    save_json(vpath, base)
+
+    # Create Application object
+    app = create_application(
+        DATA_DIR,
+        jd_capture_id=cap_path.name,
+        variant_name=variant,
+        status='draft',
+        meta={
+            'title': title,
+            'created_from': 'jd_capture',
+        },
+    )
+
+    return jsonify({'success': True, 'application': asdict(app) if 'asdict' in globals() else {
+        'id': app.id,
+        'created_at': app.created_at,
+        'status': app.status,
+        'jd_capture_id': app.jd_capture_id,
+        'variant_name': app.variant_name,
+        'meta': app.meta,
+    }})
+
+
+@app.route('/api/applications/<app_id>', methods=['GET'])
+@handle_errors
+def applications_get(app_id: str):
+    app = load_application(DATA_DIR, app_id)
+
+    cap_path = (DATA_DIR / 'jd_captures' / app.jd_capture_id)
+    capture = load_json(cap_path) if cap_path.exists() else None
+
+    # Load variant resume data
+    if app.variant_name == 'master':
+        rpath = get_master_path(DATA_DIR)
+    else:
+        rpath = get_variant_path(DATA_DIR, app.variant_name)
+    resume_data = load_json(rpath) if rpath.exists() else {}
+
+    # Gap analysis: prefer jd_analysis keywords if present
+    meta = resume_data.get('_meta') if isinstance(resume_data.get('_meta'), dict) else {}
+    jd_analysis = meta.get('jd_analysis') if isinstance(meta.get('jd_analysis'), dict) else {}
+    top_kw = jd_analysis.get('top_keywords') if isinstance(jd_analysis.get('top_keywords'), list) else None
+
+    jd_text = str((capture or {}).get('text') or '')
+    gaps = gap_analyze(jd_text, resume_data, top_keywords=top_kw)
+
+    return jsonify({'success': True, 'application': {
+        'id': app.id,
+        'created_at': app.created_at,
+        'status': app.status,
+        'jd_capture_id': app.jd_capture_id,
+        'variant_name': app.variant_name,
+        'meta': app.meta,
+    }, 'jd_capture': capture, 'resume_data': resume_data, 'gap': gaps})
+
+
+@app.route('/api/applications/<app_id>/recompute', methods=['POST'])
+@handle_errors
+def applications_recompute(app_id: str):
+    app = load_application(DATA_DIR, app_id)
+
+    cap_path = (DATA_DIR / 'jd_captures' / app.jd_capture_id)
+    capture = load_json(cap_path) if cap_path.exists() else None
+    jd_text = str((capture or {}).get('text') or '')
+
+    if app.variant_name == 'master':
+        rpath = get_master_path(DATA_DIR)
+    else:
+        rpath = get_variant_path(DATA_DIR, app.variant_name)
+    resume_data = load_json(rpath) if rpath.exists() else {}
+
+    meta = resume_data.get('_meta') if isinstance(resume_data.get('_meta'), dict) else {}
+    jd_analysis = meta.get('jd_analysis') if isinstance(meta.get('jd_analysis'), dict) else {}
+    top_kw = jd_analysis.get('top_keywords') if isinstance(jd_analysis.get('top_keywords'), list) else None
+
+    gaps = gap_analyze(jd_text, resume_data, top_keywords=top_kw)
+
+    # persist a snapshot into application meta (not resume)
+    app.meta['gap_snapshot'] = {
+        'computed_at': datetime.utcnow().isoformat() + 'Z',
+        'gaps': gaps.get('gaps', [])[:32],
+        'matches': gaps.get('matches', [])[:32],
+    }
+    save_application(DATA_DIR, app)
+
+    return jsonify({'success': True, 'application': {
+        'id': app.id,
+        'status': app.status,
+        'meta': app.meta,
+    }, 'gap': gaps})
+
+
+@app.route('/api/applications/<app_id>/status', methods=['POST'])
+@handle_errors
+def applications_set_status(app_id: str):
+    payload: Dict[str, Any] = request.json or {}
+    status = (payload.get('status') or '').strip()
+    app = set_status(DATA_DIR, app_id, status)
+    return jsonify({'success': True, 'application': {
+        'id': app.id,
+        'status': app.status,
+    }})
 
 
 @app.route('/api/variants', methods=['GET'])
