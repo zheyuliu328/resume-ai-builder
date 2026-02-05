@@ -29,25 +29,38 @@ def _stem_en(token: str) -> str:
     - managing/managed -> manag
     - systems/system -> system
 
-    This is not linguistically perfect; it's a pragmatic V0.
+    Pragmatic V0: also strips trailing punctuation and improves plural handling.
     """
-    t = token.lower()
+    t = (token or "").lower().strip()
 
-    # normalize possessive/plurals
+    # strip common trailing punctuation (keep internal / + . for tokens like ci/cd, c++).
+    t = t.strip("\"'`()[]{}<>.,;:!?")
+
+    # normalize possessive
     if t.endswith("'s"):
         t = t[:-2]
 
-    # common suffixes
-    for suf in ("ingly", "edly", "ingly", "ingly"):
+    # common suffixes (adverbs)
+    for suf in ("ingly", "edly"):
         if t.endswith(suf) and len(t) > len(suf) + 2:
             return t[: -len(suf)]
 
-    for suf in ("ing", "ed", "es", "s"):
+    # verbs
+    for suf in ("ing", "ed"):
         if t.endswith(suf) and len(t) > len(suf) + 2:
             t = t[: -len(suf)]
             break
 
-    # collapse double letters (managed -> manag(e)d -> manag) already ok; keep simple.
+    # plurals: prefer stripping only trailing 's' unless it's a classic -es plural.
+    if t.endswith("es") and len(t) > 4:
+        if t.endswith(("ches", "shes", "xes", "zes", "sses")):
+            t = t[:-2]
+        else:
+            # pipelines -> pipeline (strip only 's')
+            t = t[:-1]
+    elif t.endswith("s") and len(t) > 3:
+        t = t[:-1]
+
     return t
 
 
