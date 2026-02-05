@@ -21,7 +21,7 @@ from variants_store import (
 )
 
 # Mission Control (local-first)
-from application_store import create_application, load_application, save_application, set_status
+from application_store import create_application, load_application, save_application, set_status, list_applications
 from gap_engine import gap_analyze
 
 # NOTE: keep imports local-first; no heavy deps.
@@ -757,6 +757,29 @@ def applications_set_status(app_id: str):
         'id': app.id,
         'status': app.status,
     }})
+
+
+@app.route('/api/applications', methods=['GET'])
+@handle_errors
+def applications_list():
+    """List applications grouped by status."""
+    apps = list_applications(DATA_DIR)
+    groups = {"draft": [], "ready": [], "applied": [], "archived": []}
+    for app in apps.values():
+        groups.setdefault(app.status, []).append({
+            'id': app.id,
+            'created_at': app.created_at,
+            'status': app.status,
+            'jd_capture_id': app.jd_capture_id,
+            'variant_name': app.variant_name,
+            'title': (app.meta or {}).get('title') or '',
+        })
+
+    # newest first
+    for k in list(groups.keys()):
+        groups[k] = sorted(groups[k], key=lambda x: x.get('created_at',''), reverse=True)
+
+    return jsonify({'success': True, 'groups': groups})
 
 
 @app.route('/api/variants', methods=['GET'])

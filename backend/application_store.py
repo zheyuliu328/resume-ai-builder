@@ -105,3 +105,24 @@ def set_status(data_dir: Path, app_id: str, status: str) -> Application:
         app.status = status
         save_application(data_dir, app)
     return app
+
+
+def list_applications(data_dir: Path) -> Dict[str, Application]:
+    """Return id->Application for all stored apps."""
+    ensure_app_dirs(data_dir)
+    out: Dict[str, Application] = {}
+    for p in sorted((data_dir / 'applications').glob('app_*.json')):
+        try:
+            obj = json.loads(p.read_text('utf-8'))
+            app_id = obj.get('id') or p.stem.replace('app_', '')
+            out[app_id] = Application(
+                id=app_id,
+                created_at=obj.get('created_at') or _now_iso(),
+                status=obj.get('status') or 'draft',
+                jd_capture_id=obj.get('jd_capture_id') or '',
+                variant_name=obj.get('variant_name') or 'master',
+                meta=obj.get('meta') if isinstance(obj.get('meta'), dict) else {},
+            )
+        except Exception:
+            continue
+    return out

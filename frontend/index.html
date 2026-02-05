@@ -247,6 +247,10 @@
                     <span class="nav-icon">📥</span>
                     <span>导入PDF</span>
                 </div>
+                <div class="nav-item" onclick="switchView('mission')">
+                    <span class="nav-icon">🛰️</span>
+                    <span>Mission</span>
+                </div>
                 <div class="nav-item" onclick="switchView('chat')">
                     <span class="nav-icon">💬</span>
                     <span>Chat / JD</span>
@@ -475,6 +479,58 @@
                     </div>
                 </div>
 
+                <!-- Mission Control (War Room) -->
+                <div id="mission-view" class="view">
+                    <div class="card" style="max-width: 1200px; margin: 0 auto; padding: 18px;">
+                        <h3 style="margin-bottom: 10px;">🛰️ Mission Control</h3>
+                        <p class="muted" style="margin-bottom: 14px;">以目标（Application）为核心：左边 JD 情报 + Gap，右边武器（Variant 简历）。点击红色 Gap 会自动生成修复指令（仍需你确认 Apply）。</p>
+
+                        <div style="display:grid;grid-template-columns: 260px 1fr; gap: 14px;">
+                            <div class="card" style="padding:12px;">
+                                <div style="font-weight:650;margin-bottom:8px;">Applications</div>
+                                <div class="muted" style="font-size:12px;margin-bottom:10px;">Draft / Ready / Applied / Archived</div>
+                                <div id="app-groups" style="display:grid;gap:10px;"></div>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 14px;">
+                                <div class="card" style="padding:12px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                                        <div style="font-weight:650;">Target (JD)</div>
+                                        <button class="btn btn-secondary" onclick="missionRecompute()">Recompute</button>
+                                    </div>
+                                    <div id="mission-gap" style="margin-top:10px;display:grid;grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div>
+                                            <div class="muted" style="font-size:12px;margin-bottom:6px;">Gaps</div>
+                                            <div id="gap-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                                        </div>
+                                        <div>
+                                            <div class="muted" style="font-size:12px;margin-bottom:6px;">Matches</div>
+                                            <div id="match-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                                        </div>
+                                    </div>
+                                    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0;" />
+                                    <div class="muted" style="font-size:12px;margin-bottom:6px;">JD Text</div>
+                                    <pre id="jd-text-preview" style="white-space:pre-wrap;word-break:break-word;max-height: 360px;overflow:auto;color:var(--text);background: rgba(0,0,0,0.20);border:1px solid var(--border);padding:12px;border-radius:12px;"></pre>
+                                </div>
+
+                                <div class="card" style="padding:12px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                                        <div style="font-weight:650;">Weapon (Variant Resume)</div>
+                                        <div class="muted" id="mission-variant" style="font-size:12px;"></div>
+                                    </div>
+                                    <pre id="mission-resume" style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height: 540px;overflow:auto;color:var(--text);background: rgba(0,0,0,0.20);border:1px solid var(--border);padding:12px;border-radius:12px;"></pre>
+                                    <div class="muted" style="font-size:12px;margin-top:10px;">Tip: 点击左侧红色 Gap 会自动填充 Chat 指令。</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+                        <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end;">
+                            <button class="btn btn-primary" onclick="missionOpenChat()">Open Chat & Fix</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Chat 视图 -->
                 <div id="chat-view" class="view">
                     <div class="card" style="max-width: 980px; margin: 0 auto; padding: 18px;">
@@ -587,5 +643,6 @@
     <script src="app.js"></script>
     <script src="import.js"></script>
     <script src="chat.js"></script>
+    <script src="mission.js"></script>
 </body>
 </html>
