@@ -214,6 +214,7 @@ async function selectVariant(name) {
                 onVariantChangedForChat(currentResumeData);
             }
 
+            renderDashboard();
             showNotification(`已切换到 variant: ${activeVariantName}`);
         }
     } catch (e) {
@@ -392,6 +393,7 @@ async function analyzeJDAndCreateVariant() {
             }
 
             closeJDVariantModal();
+            renderDashboard();
             showNotification(`已创建并切换到: ${activeVariantName}`);
 
             // Optional: dump meta into JD result panel if present
@@ -437,6 +439,8 @@ function switchView(viewName, evt) {
     // 更新标题
     const titles = {
         'config': 'API配置',
+        'dashboard': 'Dashboard',
+        'refinery': 'Refinery',
         'import': '导入PDF',
         'edit': '编辑简历',
         'chat': 'Chat / JD',
@@ -449,6 +453,17 @@ function switchView(viewName, evt) {
         loadResume();
     } else if (viewName === 'preview') {
         loadPreview();
+    } else if (viewName === 'dashboard') {
+        // Ensure data is available for meta preview
+        (async () => {
+            if (!currentResumeData) {
+                await loadResumeData();
+                await initVariants({ silent: true });
+            }
+            renderDashboard();
+        })();
+    } else if (viewName === 'refinery') {
+        loadRefineryAnalytics();
     }
 }
 
@@ -493,6 +508,7 @@ async function loadResume() {
             await initVariants({ silent: true });
             document.getElementById('resume-data').innerHTML = 
                 `<pre>${JSON.stringify(result.data, null, 2)}</pre>`;
+            renderDashboard();
             showNotification(`简历数据已加载（${activeVariantName}）`);
         } else {
             document.getElementById('resume-data').innerHTML = 
@@ -553,7 +569,8 @@ async function updateSection() {
     try {
         const result = await apiCall('/api/update', {
             method: 'POST',
-            body: JSON.stringify({ section, content }),
+            // Preview-first: ask backend for a suggestion without persisting.
+            body: JSON.stringify({ section, content, resume_data: currentResumeData || {}, apply: false }),
             timeoutMs: 60000,
         });
 
@@ -784,6 +801,36 @@ async function exportPDFSmart() {
         const meta = result.meta || {};
         const trimmed = !!meta.trimmed;
 
+        // Surface meta + TRIMMED warning in UI
+        const warnEl = document.getElementById('export-trim-warning');
+        if (warnEl) warnEl.style.display = trimmed ? 'block' : 'none';
+        const metaEl = document.getElementById('export-last-meta');
+        if (metaEl) {
+            metaEl.textContent = `Last export meta:\n${JSON.stringify({ filename: result.filename, ...meta }, null, 2)}`;
+        }
+
+        // Mirror export record into local state (backend already persisted it).
+        try {
+            if (currentResumeData && typeof currentResumeData === 'object') {
+                if (!currentResumeData._meta || typeof currentResumeData._meta !== 'object') currentResumeData._meta = {};
+                if (!Array.isArray(currentResumeData._meta.exports)) currentResumeData._meta.exports = [];
+                currentResumeData._meta.exports.unshift({
+                    ts: new Date().toISOString(),
+                    target_pages: Number(exportState.pages || 1),
+                    template: String(exportState.template || 'modern').trim(),
+                    pages: meta.pages,
+                    trimmed,
+                    trim_summary: meta.trim_summary || '',
+                    filename: result.filename,
+                });
+                currentResumeData._meta.exports = currentResumeData._meta.exports.slice(0, 20);
+            }
+        } catch (e) {
+            console.warn('[Export] local meta update skipped:', e);
+        }
+
+        renderDashboard();
+
         // Filename compliance: add _TRIMMED if content trim happened
         const rawName = (result.filename || 'resume.pdf');
         const base = rawName.replace(/\.pdf$/i, '');
@@ -810,6 +857,106 @@ async function exportPDFSmart() {
             btn.textContent = 'Download';
         }
         if (hint) hint.style.display = 'none';
+    }
+}
+
+function _dashSetText(id, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+}
+
+function _dashSetPre(id, obj) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (obj === undefined || obj === null || obj === '') {
+        el.textContent = '';
+        return;
+    }
+    el.textContent = (typeof obj === 'string') ? obj : JSON.stringify(obj, null, 2);
+}
+
+function _trimText(s, maxLen = 320) {
+    const t = String(s || '');
+    if (t.length <= maxLen) return t;
+    return t.slice(0, Math.max(0, maxLen - 1)) + '…';
+}
+
+function renderDashboard() {
+    // Variant pill
+    const pill = document.getElementById('dashboard-variant-pill');
+    if (pill) pill.textContent = activeVariantName || 'master';
+
+    const hint = document.getElementById('dashboard-variant-hint');
+    if (hint) {
+        const total = Array.isArray(variantsList) ? variantsList.length : 1;
+        hint.textContent = (activeVariantName && activeVariantName !== 'master')
+            ? `Target variant. Total variants: ${total}`
+            : `Master variant. Total variants: ${total}`;
+    }
+
+    const meta = (currentResumeData && typeof currentResumeData === 'object') ? (currentResumeData._meta || {}) : {};
+    const exports = Array.isArray(meta.exports) ? meta.exports : [];
+    const last = exports.length ? exports[0] : null;
+
+    // Last export meta
+    if (last) {
+        _dashSetPre('dashboard-export-meta', last);
+        const trimmed = !!last.trimmed;
+        const trimBox = document.getElementById('dashboard-export-trim');
+        if (trimBox) trimBox.style.display = trimmed ? 'block' : 'none';
+        _dashSetText('dashboard-export-trim-summary', _trimText(last.trim_summary || '', 420));
+    } else {
+        _dashSetPre('dashboard-export-meta', 'No exports yet. Use “导出PDF” to generate one.');
+        const trimBox = document.getElementById('dashboard-export-trim');
+        if (trimBox) trimBox.style.display = 'none';
+        _dashSetText('dashboard-export-trim-summary', '');
+    }
+
+    // Evidence chain
+    _dashSetPre('dashboard-jd-parse', meta.jd_parse || null);
+    _dashSetPre('dashboard-jd-analysis', meta.jd_analysis || null);
+    _dashSetPre('dashboard-exports', exports);
+}
+
+async function loadRefineryAnalytics() {
+    const status = document.getElementById('refinery-status');
+    const sumEl = document.getElementById('refinery-summary');
+    const topEl = document.getElementById('refinery-top');
+    const perEl = document.getElementById('refinery-per-variant');
+
+    if (status) status.textContent = 'Loading…';
+    if (sumEl) sumEl.textContent = '';
+    if (topEl) topEl.textContent = '';
+    if (perEl) perEl.textContent = '';
+
+    try {
+        const res = await apiCall('/api/refinery/analytics', { timeoutMs: 15000 });
+        const data = res && res.data ? res.data : null;
+        if (!data) throw new Error('empty_response');
+
+        const summary = {
+            generated_at: data.generated_at,
+            targets_count: data.targets_count,
+            variants_total: data.variants_total,
+            avg_match_score: data.avg_match_score,
+        };
+
+        const top = {
+            top_gaps: data.top_gaps || [],
+            top_keywords: data.top_keywords || [],
+        };
+
+        if (status) status.textContent = 'OK (local cache: data/analytics.json)';
+        if (sumEl) sumEl.textContent = JSON.stringify(summary, null, 2);
+        if (topEl) topEl.textContent = JSON.stringify(top, null, 2);
+        if (perEl) perEl.textContent = JSON.stringify(data.per_variant || [], null, 2);
+    } catch (e) {
+        if (status) status.textContent = 'Failed: ' + e.message;
+        if (sumEl) sumEl.textContent = '';
+        if (topEl) topEl.textContent = '';
+        if (perEl) perEl.textContent = '';
+        showNotification('Refinery 加载失败：' + e.message, 'error');
     }
 }
 

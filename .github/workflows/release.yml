@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z). Required for manual runs."
+        required: true
+        type: string
+      notes_source:
+        description: "Notes source: release_notes|roadmap|auto"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - release_notes
+          - roadmap
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create tag + release
+      packages: write   # push ghcr image
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, 'Release v'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            v="${{ inputs.version }}"
+          else
+            msg="${{ github.event.head_commit.message }}"
+            # Accept: "Release v1.2.3" anywhere in commit message
+            v="$(printf '%s' "$msg" | sed -nE 's/.*Release v([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1)"
+          fi
+
+          if [[ -z "$v" ]]; then
+            echo "Could not determine version. Provide via workflow_dispatch or ensure commit contains 'Release vX.Y.Z'." >&2
+            exit 1
+          fi
+
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $v (expected X.Y.Z)" >&2
+            exit 1
+          fi
+
+          tag="v${v}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create annotated tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+
+          # Configure committer identity for tagging
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag already exists: $tag" >&2
+            exit 1
+          fi
+
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Build release notes
+        id: notes
+        shell: bash
+        env:
+          NOTES_SOURCE: ${{ inputs.notes_source }}
+        run: |
+          set -euo pipefail
+
+          v="${{ steps.ver.outputs.version }}"
+          tag="${{ steps.ver.outputs.tag }}"
+
+          notes_file="release_notes_body.md"
+          rn="RELEASE_NOTES_${tag}.md"
+          if [[ -f "${rn}" ]]; then
+            rn_path="${rn}"
+          else
+            # also accept: RELEASE_NOTES_vX.Y.Z.md
+            rn2="RELEASE_NOTES_v${v}.md"
+            rn_path="${rn2}"
+          fi
+
+          pick="${NOTES_SOURCE:-auto}"
+
+          if [[ "$pick" == "release_notes" || ("$pick" == "auto" && -f "$rn_path") ]]; then
+            if [[ ! -f "$rn_path" ]]; then
+              echo "Requested release_notes but file not found: $rn_path" >&2
+              exit 1
+            fi
+            {
+              echo "# Release ${tag}"
+              echo
+              cat "$rn_path"
+            } > "$notes_file"
+          else
+            # ROADMAP fallback (read-only). Best-effort extract section "## vX.Y.Z".
+            if [[ -f ROADMAP.md ]]; then
+              {
+                echo "# Release ${tag}"
+                echo
+                echo "(Notes auto-extracted from ROADMAP.md)"
+                echo
+                awk -v ver="$v" '
+                  BEGIN{in=0}
+                  $0 ~ "^##[[:space:]]+v"ver"([[:space:]]|$)" {in=1; next}
+                  $0 ~ "^##[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+" {if(in==1){exit} }
+                  {if(in==1) print}
+                ' ROADMAP.md
+              } > "$notes_file"
+
+              # If extraction yields empty, keep minimal body.
+              if [[ ! -s "$notes_file" ]]; then
+                echo "# Release ${tag}" > "$notes_file"
+              fi
+            else
+              echo "# Release ${tag}" > "$notes_file"
+            fi
+          fi
+
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+          notes_file="${{ steps.notes.outputs.notes_file }}"
+          gh release create "$tag" --title "Release $tag" --notes-file "$notes_file"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

@@ -189,6 +189,17 @@ Requirements: Python, JavaScript, REST APIs, testing, performance.
         if not pdf_path.exists() or pdf_path.stat().st_size < 1000:
             raise RuntimeError("export pdf did not create a valid file")
 
+        # 8) Confirm export meta persisted in active variant JSON.
+        r2 = _http_json("POST", f"{base}/api/variants/select", {"name": "target_destroy_test"}, timeout=10.0)
+        if not r2.get("success"):
+            raise RuntimeError(f"re-select variant failed: {r2}")
+        v2 = r2.get("data")
+        exports = None
+        if isinstance(v2, dict):
+            exports = (v2.get("_meta") or {}).get("exports")
+        if not isinstance(exports, list) or not exports:
+            raise RuntimeError("expected _meta.exports to be persisted after export")
+
         meta = r.get("meta") or {}
         print(
             json.dumps(
@@ -199,6 +210,7 @@ Requirements: Python, JavaScript, REST APIs, testing, performance.
                     "pdf": str(pdf_path),
                     "pdf_pages": meta.get("pages"),
                     "pdf_trimmed": meta.get("trimmed"),
+                    "exports_count": len(exports),
                 },
                 ensure_ascii=False,
             )

@@ -216,6 +216,53 @@ FALLBACK_MODELS = [
 - **故障排查**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 - **Electron版本**: [ELECTRON_README.md](ELECTRON_README.md)
 
+## 🚢 Release（GitHub Actions Logistics Layer）
+
+本仓库包含一个“手动门控”的发布工作流（不会自动合并 PR）。
+
+### 1) 通过 merge commit 触发发布（推荐）
+
+当 `main` 分支收到一次 push，并且 **该 commit message 包含**：`Release vX.Y.Z`（例如：`Release v1.1.0`），工作流会执行：
+
+- 解析版本号 `X.Y.Z` → 创建 annotated tag `vX.Y.Z`
+- 创建 GitHub Release（release notes 优先来自 `RELEASE_NOTES_vX.Y.Z.md`；否则尝试从 `ROADMAP.md` 中提取 `## vX.Y.Z` 小节）
+- 构建并推送 Docker 镜像到 `ghcr.io/<owner>/<repo>`（使用 `GITHUB_TOKEN`；需要 `packages: write` 权限）
+
+### Docker 使用说明（GHCR）
+
+拉取并运行（示例）：
+
+```bash
+# 需要先在 GitHub Packages 页面确认镜像可见性（public/private）
+docker pull ghcr.io/<owner>/<repo>:vX.Y.Z
+
+docker run --rm -p 5001:5001 \
+  -e FLASK_PORT=5001 \
+  ghcr.io/<owner>/<repo>:vX.Y.Z
+```
+
+本地构建（不推送）：
+
+```bash
+docker build -t resume-ai-builder:local .
+
+docker run --rm -p 5001:5001 resume-ai-builder:local
+```
+
+> 人工门控：只有显式包含 `Release v...` 的 commit 或手动触发才会发布。
+
+### 2) 手动 workflow_dispatch 发布
+
+在 GitHub Actions 页面手动运行 `Release` workflow，并填写：
+- `version`: `X.Y.Z`
+- `notes_source`: `auto` / `release_notes` / `roadmap`
+
+### 3) 创建下一轮 planning 分支（手动）
+
+`Auto Branch (manual)` 工作流目前仅支持 `workflow_dispatch`：
+- 输入 `planning_branch`（例如：`feat/v1.2-planning`）
+- 会从 `main`（或你指定的 base）创建并 push 该分支
+
 ## 🛠️ 开发路线图
 
 - [x] **Phase 1**: 核心功能实现

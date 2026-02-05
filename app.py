@@ -8,6 +8,90 @@ import os
 from pathlib import Path
 import anthropic
 
+
+def trim_resume_relevance(data: dict, *, top_keywords=None, max_experiences=None, max_bullets=None):
+    """Trim resume content, dropping least-relevant bullets first.
+
+    Relevance v0 (no ML): score each bullet by keyword hits.
+    - If top_keywords is falsy: fallback to positional trimming.
+
+    Returns: (trimmed_data, trim_summary)
+    """
+    import copy
+
+    top_keywords = [str(k).lower() for k in (top_keywords or []) if str(k).strip()]
+
+    def score(text: str) -> int:
+        t = (text or '').lower()
+        if not t or not top_keywords:
+            return 0
+        s = 0
+        for k in top_keywords:
+            if k and k in t:
+                s += 1
+        return s
+
+    d = copy.deepcopy(data) if isinstance(data, dict) else {}
+    summary = {
+        'mode': 'relevance' if top_keywords else 'positional',
+        'top_keywords': top_keywords[:10],
+        'dropped': {'experiences': 0, 'experience_highlights': 0, 'project_highlights': 0},
+    }
+
+    if isinstance(d.get('experience'), list) and max_experiences:
+        exps = [e for e in d['experience'] if isinstance(e, dict)]
+        summary['dropped']['experiences'] = max(0, len(exps) - int(max_experiences))
+        d['experience'] = exps[: int(max_experiences)]
+
+    if isinstance(d.get('experience'), list) and max_bullets:
+        for e in d['experience']:
+            hs = e.get('highlights')
+            if not isinstance(hs, list):
+                continue
+            items = [h for h in hs if isinstance(h, str) and h.strip()]
+            if len(items) <= int(max_bullets):
+                e['highlights'] = items
+                continue
+
+            if top_keywords:
+                scored = [(score(txt), idx, txt) for idx, txt in enumerate(items)]
+                scored.sort(key=lambda t: (-t[0], t[1]))
+                keep = scored[: int(max_bullets)]
+                keep_idxs = sorted([k[1] for k in keep])
+                kept_items = [items[i] for i in keep_idxs]
+            else:
+                kept_items = items[: int(max_bullets)]
+
+            summary['dropped']['experience_highlights'] += max(0, len(items) - len(kept_items))
+            e['highlights'] = kept_items
+
+    if isinstance(d.get('projects'), list) and max_bullets:
+        for p in d['projects']:
+            if not isinstance(p, dict):
+                continue
+            hs = p.get('highlights')
+            if not isinstance(hs, list):
+                continue
+            items = [h for h in hs if isinstance(h, str) and h.strip()]
+            if len(items) <= int(max_bullets):
+                p['highlights'] = items
+                continue
+
+            if top_keywords:
+                scored = [(score(txt), idx, txt) for idx, txt in enumerate(items)]
+                scored.sort(key=lambda t: (-t[0], t[1]))
+                keep = scored[: int(max_bullets)]
+                keep_idxs = sorted([k[1] for k in keep])
+                kept_items = [items[i] for i in keep_idxs]
+            else:
+                kept_items = items[: int(max_bullets)]
+
+            summary['dropped']['project_highlights'] += max(0, len(items) - len(kept_items))
+            p['highlights'] = kept_items
+
+    return d, summary
+
+
 class ResumeBuilder:
     def __init__(self, api_key: str, base_url: str = "https://api.anthropic.com", model: str = "claude-sonnet-4-5-20250929"):
         """初始化简历构建器"""
@@ -38,8 +122,13 @@ class ResumeBuilder:
         with open(self.data_file, 'w', encoding='utf-8') as f:
             json.dump(self.resume_data, f, ensure_ascii=False, indent=2)
     
-    def update_section(self, section: str, content: str):
-        """使用AI优化并更新简历部分"""
+    def update_section(self, section: str, content: str, *, apply: bool = True):
+        """使用AI优化并更新简历部分。
+
+        Safety-by-design:
+        - When apply=False: only return a suggested update (no disk writes).
+        - When apply=True: persist to resume_data.json (legacy behavior).
+        """
         prompt = f"""请根据以下新信息，优化并更新简历的{section}部分。
         
 现有内容：
@@ -49,26 +138,31 @@ class ResumeBuilder:
 {content}
 
 请返回JSON格式的更新内容，保持专业、简洁、突出成果。"""
-        
+
         message = self.client.messages.create(
             model=self.model,
             max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
         )
-        
+
         # 提取AI返回的内容
         response_text = message.content[0].text
+
         # 尝试解析JSON
         try:
             import re
-            json_match = re.search(r'\{.*\}|\[.*\]', response_text, re.DOTALL)
+
+            json_match = re.search(r"\{.*\}|\[.*\]", response_text, re.DOTALL)
             if json_match:
                 updated_content = json.loads(json_match.group())
                 self.resume_data[section] = updated_content
-                self._save_resume()
+                if apply:
+                    self._save_resume()
                 return updated_content
-        except:
+        except Exception:
+            # Fall through to raw text.
             pass
+
         return response_text
     
     def _safe_render_list(self, items, render_func):
@@ -428,22 +522,33 @@ class ResumeBuilder:
 
         def apply_trim(data: dict, trim):
             if not trim:
-                return data
-            d = copy.deepcopy(data)
+                return data, None
+
             max_exps = trim.get('max_experiences')
             max_bullets = trim.get('max_bullets')
-            if isinstance(d.get('experience'), list) and max_exps:
-                d['experience'] = [e for e in d['experience'] if isinstance(e, dict)][:max_exps]
-                if max_bullets:
-                    for e in d['experience']:
-                        if isinstance(e.get('highlights'), list):
-                            e['highlights'] = [h for h in e['highlights'] if h][:max_bullets]
-            if isinstance(d.get('projects'), list) and max_bullets:
-                # Also trim project bullets a bit
-                for p in d['projects']:
-                    if isinstance(p, dict) and isinstance(p.get('highlights'), list):
-                        p['highlights'] = [h for h in p['highlights'] if h][:max_bullets]
-            return d
+
+            jd_analysis = None
+            if isinstance(self.resume_data, dict):
+                meta = self.resume_data.get('_meta')
+                if isinstance(meta, dict):
+                    jd_analysis = meta.get('jd_analysis')
+            top_keywords = jd_analysis.get('top_keywords') if isinstance(jd_analysis, dict) else None
+
+            if isinstance(top_keywords, list) and top_keywords:
+                return trim_resume_relevance(
+                    data,
+                    top_keywords=top_keywords,
+                    max_experiences=max_exps,
+                    max_bullets=max_bullets,
+                )
+
+            # Positional fallback
+            return trim_resume_relevance(
+                data,
+                top_keywords=None,
+                max_experiences=max_exps,
+                max_bullets=max_bullets,
+            )
 
         # Render + fit loop
         with sync_playwright() as p:
@@ -453,11 +558,11 @@ class ResumeBuilder:
 
                 best_pdf = None
                 best_pages = 999
-                best_meta = {"pages": 999, "trimmed": False, "style": {}, "trim": None}
+                best_meta = {"pages": 999, "trimmed": False, "style": {}, "trim": None, "trim_summary": None}
 
                 for trim in trim_steps:
                     for style in style_steps:
-                        data_override = apply_trim(self.resume_data, trim)
+                        data_override, trim_summary = apply_trim(self.resume_data, trim)
                         html = self.generate_html(template=template, style=style, data=data_override)
 
                         with tempfile.TemporaryDirectory() as td:
@@ -476,7 +581,7 @@ class ResumeBuilder:
                                 best_pages = pages
                                 with open(pdf_path, 'rb') as rf:
                                     best_pdf = rf.read()
-                                best_meta = {"pages": pages, "trimmed": trimmed, "style": style, "trim": trim}
+                                best_meta = {"pages": pages, "trimmed": trimmed, "style": style, "trim": trim, "trim_summary": trim_summary}
 
                             if pages <= target_pages:
                                 with open(filename, 'wb') as out:
