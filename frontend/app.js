@@ -443,6 +443,7 @@ function switchView(viewName, evt) {
         'refinery': 'Refinery',
         'import': '导入PDF',
         'edit': '编辑简历',
+        'mission': 'Mission Control',
         'chat': 'Chat / JD',
         'preview': '预览'
     };
@@ -453,6 +454,8 @@ function switchView(viewName, evt) {
         loadResume();
     } else if (viewName === 'preview') {
         loadPreview();
+    } else if (viewName === 'mission') {
+        missionInit();
     } else if (viewName === 'dashboard') {
         // Ensure data is available for meta preview
         (async () => {
