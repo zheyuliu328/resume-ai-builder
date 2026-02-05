@@ -1,0 +1,10 @@
+# Source (unpinned) requirements for Resume AI Builder
+# Use `pip install -r requirements.txt` for the pinned lock.
+
+anthropic>=0.18.0
+playwright>=1.40.0
+flask>=3.0.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+pypdf>=4.0.0
+ruff>=0.6.0
