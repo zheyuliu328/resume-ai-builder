@@ -137,10 +137,10 @@ jobs:
                 echo "(Notes auto-extracted from ROADMAP.md)"
                 echo
                 awk -v ver="$v" '
-                  BEGIN{in=0}
-                  $0 ~ "^##[[:space:]]+v"ver"([[:space:]]|$)" {in=1; next}
-                  $0 ~ "^##[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+" {if(in==1){exit} }
-                  {if(in==1) print}
+                  BEGIN{inside=0}
+                  $0 ~ "^##[[:space:]]+v"ver"([[:space:]]|$)" {inside=1; next}
+                  $0 ~ "^##[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+" {if(inside==1){exit} }
+                  {if(inside==1) print}
                 ' ROADMAP.md
               } > "$notes_file"
 
