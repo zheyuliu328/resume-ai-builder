@@ -1,7 +1,35 @@
+[tool.poetry]
+name = "resume-ai-builder"
+version = "1.4.2"
+description = "CLI-first resume compilation engine (local-first)."
+authors = ["zheyuliu328"]
+readme = "README.md"
+packages = [{ include = "resume_compiler", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^2.12.0"
+typer = "^0.12.0"
+pyyaml = "^6.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+ruff = "^0.6.0"
+black = "^24.0.0"
+
+[tool.poetry.scripts]
+resume-compiler = "resume_compiler.cli:main"
+
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py311"
 
-[tool.ruff.lint]
-# Keep lint lightweight: focus on actual correctness issues.
-select = ["E9", "F"]
+[tool.black]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
