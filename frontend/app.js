@@ -47,16 +47,19 @@ function setStatusPill(id, text, kind = 'neutral') {
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = text;
-    const styles = {
-        ok: { bg: '#ecfdf5', fg: '#065f46' },
-        warn: { bg: '#fffbeb', fg: '#92400e' },
-        err: { bg: '#fef2f2', fg: '#991b1b' },
-        neutral: { bg: '#f3f4f6', fg: '#374151' },
-        info: { bg: '#eef2ff', fg: '#3730a3' },
+    // Remove old modifier classes
+    el.classList.remove('status-chip--info', 'status-chip--ok', 'status-chip--warn', 'status-chip--error');
+    // Add new modifier class based on kind
+    const classMap = {
+        ok: 'status-chip--ok',
+        warn: 'status-chip--warn',
+        err: 'status-chip--error',
+        error: 'status-chip--error',
+        info: 'status-chip--info',
     };
-    const s = styles[kind] || styles.neutral;
-    el.style.background = s.bg;
-    el.style.color = s.fg;
+    if (classMap[kind]) {
+        el.classList.add(classMap[kind]);
+    }
 }
 
 // 统一API调用（带日志、错误处理、超时）
