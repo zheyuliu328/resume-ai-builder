@@ -10,7 +10,9 @@ from pydantic import ValidationError
 from resume_compiler.domain.schema import Resume, ResumeContext
 from resume_compiler.ingestion.loaders import load_jd, load_resume
 from resume_compiler.pipeline import compile_resume
-from resume_compiler.processing.llm_gateway import DummyLLMGateway
+import os
+
+from resume_compiler.processing.llm_gateway import DummyLLMGateway, OpenAIChatLLMGateway
 
 app = typer.Typer(add_completion=False, help="Resume Compiler (CLI-first).")
 
@@ -40,7 +42,13 @@ def compile(
     jd_text = load_jd(jd)
     ctx = ResumeContext(target_role=target_role)
 
-    result = compile_resume(resume=resume, ctx=ctx, jd=jd_text, llm=DummyLLMGateway())
+    llm_mode = os.getenv("RESUME_COMPILER_LLM", "dummy").lower().strip()
+    if llm_mode == "real":
+        llm = OpenAIChatLLMGateway.from_env()
+    else:
+        llm = DummyLLMGateway()
+
+    result = compile_resume(resume=resume, ctx=ctx, jd=jd_text, llm=llm)
 
     payload = {
         "resume": result.resume.model_dump(),
