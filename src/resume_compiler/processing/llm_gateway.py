@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
+import random
 
 
 class LLMGateway(Protocol):
@@ -133,6 +134,10 @@ class OpenAIChatLLMGateway:
     - RESUME_COMPILER_OPENAI_API_KEY (required)
     - RESUME_COMPILER_OPENAI_MODEL (default: gpt-4.1-mini)
     - RESUME_COMPILER_OPENAI_FALLBACK_MODEL (optional)
+    - RESUME_COMPILER_OPENAI_FALLBACK_TO_DUMMY (optional: 1/true to enable)
+    - RESUME_COMPILER_OPENAI_MAX_RETRIES (optional, default: 2)
+    - RESUME_COMPILER_OPENAI_BACKOFF_BASE_SECONDS (optional, default: 0.5)
+    - RESUME_COMPILER_OPENAI_BACKOFF_JITTER_SECONDS (optional, default: 0.0)
     """
 
     base_url: str
@@ -141,6 +146,9 @@ class OpenAIChatLLMGateway:
     fallback_model: Optional[str] = None
     timeout_seconds: int = 30
     max_retries: int = 2
+    fallback_to_dummy: bool = False
+    backoff_base_seconds: float = 0.5
+    backoff_jitter_seconds: float = 0.0
 
     @classmethod
     def from_env(cls) -> "OpenAIChatLLMGateway":
@@ -148,9 +156,26 @@ class OpenAIChatLLMGateway:
         api_key = os.getenv("RESUME_COMPILER_OPENAI_API_KEY") or ""
         model = os.getenv("RESUME_COMPILER_OPENAI_MODEL", "gpt-4.1-mini")
         fallback_model = os.getenv("RESUME_COMPILER_OPENAI_FALLBACK_MODEL")
+
+        fallback_to_dummy_raw = (os.getenv("RESUME_COMPILER_OPENAI_FALLBACK_TO_DUMMY") or "").strip().lower()
+        fallback_to_dummy = fallback_to_dummy_raw in {"1", "true", "yes", "y", "on"}
+
+        max_retries = int(os.getenv("RESUME_COMPILER_OPENAI_MAX_RETRIES", "2"))
+        backoff_base_seconds = float(os.getenv("RESUME_COMPILER_OPENAI_BACKOFF_BASE_SECONDS", "0.5"))
+        backoff_jitter_seconds = float(os.getenv("RESUME_COMPILER_OPENAI_BACKOFF_JITTER_SECONDS", "0.0"))
+
         if not api_key:
             raise RuntimeError("RESUME_COMPILER_OPENAI_API_KEY is required for real LLM gateway")
-        return cls(base_url=base_url, api_key=api_key, model=model, fallback_model=fallback_model)
+        return cls(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            fallback_model=fallback_model,
+            max_retries=max_retries,
+            fallback_to_dummy=fallback_to_dummy,
+            backoff_base_seconds=backoff_base_seconds,
+            backoff_jitter_seconds=backoff_jitter_seconds,
+        )
 
     def _post_json(self, *, url: str, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
@@ -174,23 +199,51 @@ class OpenAIChatLLMGateway:
         except urllib.error.URLError as e:
             raise RuntimeError(f"LLM provider connection error: {e}") from e
 
+    def _sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
+
     def generate_json(self, *, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
         models_to_try = [self.model]
         if self.fallback_model and self.fallback_model != self.model:
             models_to_try.append(self.fallback_model)
 
+        attempts_meta: list[dict[str, Any]] = []
         last_err: Exception | None = None
+
         for model in models_to_try:
             for attempt in range(self.max_retries + 1):
                 try:
-                    return self._generate_json_once(system=system, user=user, schema=schema, model=model)
+                    out = self._generate_json_once(system=system, user=user, schema=schema, model=model)
+                    out.setdefault("_meta", {})
+                    if isinstance(out.get("_meta"), dict):
+                        out["_meta"].setdefault("attempts", attempts_meta)
+                        out["_meta"].setdefault("model", model)
+                    return out
                 except Exception as e:
                     last_err = e
-                    # small backoff
+                    attempts_meta.append(
+                        {
+                            "model": model,
+                            "attempt": attempt + 1,
+                            "error": f"{type(e).__name__}: {e}",
+                        }
+                    )
+
                     if attempt < self.max_retries:
-                        time.sleep(0.5 * (2**attempt))
+                        base = self.backoff_base_seconds * (2**attempt)
+                        jitter = (random.random() * self.backoff_jitter_seconds) if self.backoff_jitter_seconds > 0 else 0.0
+                        self._sleep(base + jitter)
                         continue
                     break
+
+        if self.fallback_to_dummy:
+            # Last resort downgrade. Dummy gateway still validates schema (may still raise).
+            out = DummyLLMGateway().generate_json(system=system, user=user, schema=schema)
+            out.setdefault("_meta", {})
+            if isinstance(out.get("_meta"), dict):
+                out["_meta"].setdefault("attempts", attempts_meta)
+                out["_meta"].setdefault("downgraded_to", "dummy")
+            return out
 
         assert last_err is not None
         raise last_err
