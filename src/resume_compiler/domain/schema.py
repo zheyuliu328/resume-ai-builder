@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
 
 class Period(BaseModel):
     start_date: str = Field(..., pattern=r"^\d{4}-\d{2}$")  # YYYY-MM
-    end_date: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+    end_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}$")
     current: bool = False
 
 
@@ -21,7 +21,7 @@ class ExperienceItem(BaseModel):
     raw_highlights: list[str]
 
     # AI 生成后的结果，生成前为空
-    refined_highlights: list[str] | None = None
+    refined_highlights: Optional[list[str]] = None
 
     tech_stack: list[str] = Field(default_factory=list)
 
@@ -37,12 +37,12 @@ class ResumeContext(BaseModel):
 
 class Contact(BaseModel):
     name: str
-    email: EmailStr | None = None
-    website: HttpUrl | None = None
+    email: Optional[EmailStr] = None
+    website: Optional[HttpUrl] = None
 
 
 class Resume(BaseModel):
     contact: Contact
-    summary: str | None = None
+    summary: Optional[str] = None
     experience: list[ExperienceItem] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
